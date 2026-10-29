@@ -2,6 +2,16 @@ name: Build SmartTube VLESS fork
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/build.yml'
+      - 'common/**'
+      - 'smarttubetv/**'
+      - 'tools/**'
+      - 'build.gradle'
+      - 'settings.gradle'
+      - 'gradle.properties'
+      - 'gradle/wrapper/**'
 
 permissions:
   contents: read
@@ -10,21 +20,20 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     timeout-minutes: 90
-
     steps:
-      - name: Checkout repository
+      - name: Check out fork
         uses: actions/checkout@v4
 
-      - name: Set up Java
+      - name: Set up Java for legacy Android Gradle Plugin
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '11'
 
-      - name: Set up Go
+      - name: Set up Go for libXray
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23.x'
+          go-version: '1.25.x'
           cache: false
 
       - name: Set up Python
@@ -32,33 +41,46 @@ jobs:
         with:
           python-version: '3.11'
 
-            - name: Install Android SDK components
+      - name: Install Android SDK components
         uses: android-actions/setup-android@v3
         env:
           SKIP_JDK_VERSION_CHECK: "true"
-        - name: Download SmartTube source
-        run: git clone --depth 1 --recurse-submodules https://github.com/yuliskov/SmartTube.git source
 
-      - name: Apply VLESS patch
-        run: patch --batch --forward -p3 -d source < SmartTube-security-vless-v9.patch
-
-      - name: Install Android components
+      - name: Install pinned Android SDK and NDK
         run: |
-          yes | sdkmanager --licenses
-          sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.2" "ndk;21.0.6113669"
+          sdkmanager --install \
+            'platform-tools' \
+            'platforms;android-33' \
+            'build-tools;33.0.2' \
+            'ndk;21.0.6113669'
+          yes | sdkmanager --licenses >/dev/null
 
-      - name: Build Xray
-        working-directory: source
-        run: bash tools/build-libxray-aar.sh
+      - name: Fetch pinned SmartTube submodules
+        run: ./tools/prepare-build.sh
 
-      - name: Build APK
-        working-directory: source
-        run: ./gradlew --no-daemon assembleStstableDebug
+      - name: Build official libXray Android AAR
+        run: ./tools/build-libxray-aar.sh
 
-      - name: Upload APK
+      - name: Build SmartTube APK and run unit tests
+        run: ./gradlew --no-daemon testStstableDebugUnitTest assembleStstableDebug
+
+      - name: Collect APK and build provenance
+        if: success()
+        shell: bash
+        run: |
+          mkdir -p dist
+          find smarttubetv/build/outputs/apk -type f -name '*.apk' -exec cp '{}' dist/ \;
+          cp common/libs/libXray.aar dist/
+          git -C . rev-parse HEAD > dist/source-commit.txt
+          git status --short > dist/working-tree-status.txt
+          sha256sum dist/* > dist/SHA256SUMS.txt
+          test -n "$(find dist -maxdepth 1 -name '*.apk' -print -quit)"
+
+      - name: Upload APK, AAR and checksums
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: SmartTube-VLESS-APK
-          path: source/smarttubetv/build/outputs/apk/**/*.apk
+          name: smarttube-vless-fork-debug
+          path: dist/
           if-no-files-found: error
           retention-days: 14
