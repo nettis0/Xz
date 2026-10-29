@@ -32,10 +32,11 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Android SDK
+            - name: Install Android SDK components
         uses: android-actions/setup-android@v3
-
-      - name: Download SmartTube source
+        env:
+          SKIP_JDK_VERSION_CHECK: "true"
+        - name: Download SmartTube source
         run: git clone --depth 1 --recurse-submodules https://github.com/yuliskov/SmartTube.git source
 
       - name: Apply VLESS patch
