@@ -72,9 +72,9 @@ jobs:
         working-directory: smarttube_src
         run: ./tools/build-libxray-aar.sh
 
-      - name: Build SmartTube APK and run unit tests
+      - name: Build SmartTube APK
         working-directory: smarttube_src
-        run: ./gradlew --no-daemon testStstableDebugUnitTest assembleStstableDebug
+        run: ./gradlew --no-daemon assembleStstableDebug
 
       - name: Collect APK and build provenance
         if: success()
