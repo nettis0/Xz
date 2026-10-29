@@ -62,28 +62,24 @@ jobs:
           distribution: temurin
           java-version: '11'
 
-      - name: Bypass Manifest Merger Conflicts via Python
+      - name: Fix Cronet Namespace Conflicts
         working-directory: smarttube_src
         run: |
           python3 -c '
-          import os
-          manifest_path = "smarttubetv/src/main/AndroidManifest.xml"
-          if os.path.exists(manifest_path):
-              with open(manifest_path, "r") as f:
-                  content = f.read()
-              if "xmlns:tools" not in content:
-                  content = content.replace("<manifest", "<manifest xmlns:tools=\"http://schemas.android.com/tools\"")
-              
-              override_attr = "tools:overrideLibrary=\"org.chromium.net, org.chromium.net.impl, org.chromium.net.cronet, go.libxray.gojni\""
-              if "tools:overrideLibrary" not in content:
-                  if "<uses-sdk" in content:
-                      content = content.replace("<uses-sdk", f"<uses-sdk {override_attr}")
-                  else:
-                      content = content.replace("<application", f"<uses-sdk {override_attr}/>\n    <application")
-              
-              with open(manifest_path, "w") as f:
-                  f.write(content)
-              print("Successfully injected tools:overrideLibrary into AndroidManifest.xml")
+          path = "smarttubetv/build.gradle"
+          with open(path, "r") as f:
+              content = f.read()
+          
+          exclusion_code = """
+          configurations.all {
+              exclude group: "org.chromium.net", module: "cronet-common"
+              exclude group: "org.chromium.net", module: "cronet-api"
+          }
+          """
+          if "cronet-common" not in content:
+              with open(path, "w") as f:
+                  f.write(content + "\n" + exclusion_code)
+              print("Successfully injected cronet exclusions.")
           '
 
       - name: Prepare build and submodules
