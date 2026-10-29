@@ -63,7 +63,9 @@ jobs:
 
       - name: Prepare build and submodules
         working-directory: smarttube_src
-        run: ./tools/prepare-build.sh
+        run: |
+          chmod +x ./tools/prepare-build.sh ./tools/build-libxray-aar.sh
+          ./tools/prepare-build.sh
 
       - name: Build official libXray Android AAR
         working-directory: smarttube_src
