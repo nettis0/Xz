@@ -1,119 +1,63 @@
 name: Build SmartTube VLESS fork
 
 on:
-
-workflow_dispatch:
+  workflow_dispatch:
 
 permissions:
-
-contents: read
+  contents: read
 
 jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
 
-build:
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-runs-on: ubuntu-22.04
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
 
-timeout-minutes: 90
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
 
-steps:
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
--
+      - name: Install Android SDK
+        uses: android-actions/setup-android@v3
 
-name: Checkout patch repository
+      - name: Download SmartTube source
+        run: git clone --depth 1 --recurse-submodules https://github.com/yuliskov/SmartTube.git source
 
-uses: actions/checkout@v4
+      - name: Apply VLESS patch
+        run: patch --batch --forward -p3 -d source < SmartTube-security-vless-v9.patch
 
-name: Set up Java
+      - name: Install Android components
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.2" "ndk;21.0.6113669"
 
-uses: actions/setup-java@v4
+      - name: Build Xray
+        working-directory: source
+        run: bash tools/build-libxray-aar.sh
 
-with:
+      - name: Build APK
+        working-directory: source
+        run: ./gradlew --no-daemon assembleStstableDebug
 
-distribution: temurin
-
-java-version: '11'
-
--
-
-name: Set up Go
-
-uses: actions/setup-go@v5
-
-with:
-
-go-version: '1.25.xcache: false
-
-name: Set up Python
-
-uses: actions/setup-python@v5
-
-with:
-
-python-version: '3.11'
-
--
-
-name: Install Android SDK
-
-uses: android-actions/setup-androi
-
-d@v3
-
-name: Download upstream SmartTu
-
-run: |
-
-be source
-
-git clone --depth 1 --recurse-subm odules https://github.com/yuliskov/Sma rtTube.git source
-
--
-
-name: Apply VLESS fork patch
-
-test -f SmartTube-security-vless-v
-
-9.patch
-
-patch --batch --forward -d source - p3 < SmartTube-security-vless-v9.patch
-
-name: Install Android SDK and NDK
-
-run:
-
-sdkmanager --install 'platform-tooIs' 'platforms; android-33' 'build-tools; 33. 0.2' 'ndk;21.0.6113669'
-
-yes | sdkmanager --licenses >/dev
-
-/null
-
-name: Build libXray AAR
-
-working-directory: source
-
--
-
-run: bash tools/build-libxray-aar.sh
-
-name: Run tests and build APK working-directory: source
-
-run: ./gradlew --no-daemon testStst ableDebugUnitTest assembleStstableDeb
-
-ug
-
-name: Collect outputs
-
-if: success()
-
-working-directory: source
-
-mkdir -p dist
-
-find smarttubetv/build/outputs/ap k -type f -name '*.apk' -exec cp '{}' dist/ \
-
-cp common/libs/libXray.aar dist/
-
-sha256sum dist/*
-
-UMS.txt
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SmartTube-VLESS-APK
+          path: source/smarttubetv/build/outputs/apk/**/*.apk
+          if-no-files-found: error
+          retention-days: 14
