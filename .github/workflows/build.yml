@@ -62,19 +62,28 @@ jobs:
           distribution: temurin
           java-version: '11'
 
-      - name: Fix Manifest Merger conflicts via Python
+      - name: Bypass Manifest Merger Conflicts via Python
         working-directory: smarttube_src
         run: |
           python3 -c '
           import os
-          props_path = "gradle.properties"
-          if os.path.exists(props_path):
-              with open(props_path, "r") as f:
+          manifest_path = "smarttubetv/src/main/AndroidManifest.xml"
+          if os.path.exists(manifest_path):
+              with open(manifest_path, "r") as f:
                   content = f.read()
-              if "android.enforceUniquePackageName" not in content:
-                  with open(props_path, "a") as f:
-                      f.write("\nandroid.enforceUniquePackageName=false\n")
-                  print("Added android.enforceUniquePackageName=false")
+              if "xmlns:tools" not in content:
+                  content = content.replace("<manifest", "<manifest xmlns:tools=\"http://schemas.android.com/tools\"")
+              
+              override_attr = "tools:overrideLibrary=\"org.chromium.net, org.chromium.net.impl, org.chromium.net.cronet, go.libxray.gojni\""
+              if "tools:overrideLibrary" not in content:
+                  if "<uses-sdk" in content:
+                      content = content.replace("<uses-sdk", f"<uses-sdk {override_attr}")
+                  else:
+                      content = content.replace("<application", f"<uses-sdk {override_attr}/>\n    <application")
+              
+              with open(manifest_path, "w") as f:
+                  f.write(content)
+              print("Successfully injected tools:overrideLibrary into AndroidManifest.xml")
           '
 
       - name: Prepare build and submodules
