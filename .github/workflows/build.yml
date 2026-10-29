@@ -1,0 +1,119 @@
+name: Build SmartTube VLESS fork
+
+on:
+
+workflow_dispatch:
+
+permissions:
+
+contents: read
+
+jobs:
+
+build:
+
+runs-on: ubuntu-22.04
+
+timeout-minutes: 90
+
+steps:
+
+-
+
+name: Checkout patch repository
+
+uses: actions/checkout@v4
+
+name: Set up Java
+
+uses: actions/setup-java@v4
+
+with:
+
+distribution: temurin
+
+java-version: '11'
+
+-
+
+name: Set up Go
+
+uses: actions/setup-go@v5
+
+with:
+
+go-version: '1.25.xcache: false
+
+name: Set up Python
+
+uses: actions/setup-python@v5
+
+with:
+
+python-version: '3.11'
+
+-
+
+name: Install Android SDK
+
+uses: android-actions/setup-androi
+
+d@v3
+
+name: Download upstream SmartTu
+
+run: |
+
+be source
+
+git clone --depth 1 --recurse-subm odules https://github.com/yuliskov/Sma rtTube.git source
+
+-
+
+name: Apply VLESS fork patch
+
+test -f SmartTube-security-vless-v
+
+9.patch
+
+patch --batch --forward -d source - p3 < SmartTube-security-vless-v9.patch
+
+name: Install Android SDK and NDK
+
+run:
+
+sdkmanager --install 'platform-tooIs' 'platforms; android-33' 'build-tools; 33. 0.2' 'ndk;21.0.6113669'
+
+yes | sdkmanager --licenses >/dev
+
+/null
+
+name: Build libXray AAR
+
+working-directory: source
+
+-
+
+run: bash tools/build-libxray-aar.sh
+
+name: Run tests and build APK working-directory: source
+
+run: ./gradlew --no-daemon testStst ableDebugUnitTest assembleStstableDeb
+
+ug
+
+name: Collect outputs
+
+if: success()
+
+working-directory: source
+
+mkdir -p dist
+
+find smarttubetv/build/outputs/ap k -type f -name '*.apk' -exec cp '{}' dist/ \
+
+cp common/libs/libXray.aar dist/
+
+sha256sum dist/*
+
+UMS.txt
