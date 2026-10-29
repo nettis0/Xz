@@ -24,11 +24,11 @@ jobs:
       - name: Check out fork
         uses: actions/checkout@v4
 
-      - name: Set up Java for legacy Android Gradle Plugin
+      - name: Set up Java 17 for Android SDK
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '11'
+          java-version: '17'
 
       - name: Set up Go for libXray
         uses: actions/setup-go@v5
@@ -43,8 +43,6 @@ jobs:
 
       - name: Install Android SDK components
         uses: android-actions/setup-android@v3
-        env:
-          SKIP_JDK_VERSION_CHECK: "true"
 
       - name: Install pinned Android SDK and NDK
         run: |
@@ -54,6 +52,12 @@ jobs:
             'build-tools;33.0.2' \
             'ndk;21.0.6113669'
           yes | sdkmanager --licenses >/dev/null
+
+      - name: Switch Java to 11 for legacy Gradle build
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
 
       - name: Fetch pinned SmartTube submodules
         run: ./tools/prepare-build.sh
