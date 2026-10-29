@@ -62,6 +62,24 @@ jobs:
           distribution: temurin
           java-version: '11'
 
+      - name: Fix Cronet namespace conflict in build.gradle
+        working-directory: smarttube_src
+        run: |
+          python3 -c '
+          path = "smarttubetv/build.gradle"
+          with open(path, "r") as f:
+              content = f.read()
+          addition = """
+          configurations.all {
+              exclude group: "org.chromium.net", module: "cronet-fallback"
+          }
+          """
+          if "cronet-fallback" not in content:
+              with open(path, "w") as f:
+                  f.write(content + "\n" + addition)
+              print("Added exclusion for cronet-fallback")
+          '
+
       - name: Prepare build and submodules
         working-directory: smarttube_src
         run: |
