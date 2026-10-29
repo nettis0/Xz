@@ -3,26 +3,19 @@ name: Build SmartTube VLESS fork
 on:
   workflow_dispatch:
   push:
-    paths:
-      - '.github/workflows/build.yml'
-      - 'common/**'
-      - 'smarttubetv/**'
-      - 'tools/**'
-      - 'build.gradle'
-      - 'settings.gradle'
-      - 'gradle.properties'
-      - 'gradle/wrapper/**'
-
-permissions:
-  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-22.04
     timeout-minutes: 90
     steps:
-      - name: Check out fork
+      - name: Check out repository (with patch)
         uses: actions/checkout@v4
+
+      - name: Clone SmartTube source and apply patch
+        run: |
+          git clone --depth 1 https://github.com/yuliskov/SmartTube.git smarttube_work
+          patch --batch --forward -p3 -d smarttube_work < SmartTube-security-vless-v9.patch
 
       - name: Set up Java 17 for Android SDK
         uses: actions/setup-java@v4
@@ -68,13 +61,16 @@ jobs:
           distribution: temurin
           java-version: '11'
 
-      - name: Fetch pinned SmartTube submodules
+      - name: Prepare build and submodules
+        working-directory: smarttube_work
         run: ./tools/prepare-build.sh
 
       - name: Build official libXray Android AAR
+        working-directory: smarttube_work
         run: ./tools/build-libxray-aar.sh
 
       - name: Build SmartTube APK and run unit tests
+        working-directory: smarttube_work
         run: ./gradlew --no-daemon testStstableDebugUnitTest assembleStstableDebug
 
       - name: Collect APK and build provenance
@@ -82,10 +78,10 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          find smarttubetv/build/outputs/apk -type f -name '*.apk' -exec cp '{}' dist/ \;
-          cp common/libs/libXray.aar dist/
-          git -C . rev-parse HEAD > dist/source-commit.txt
-          git status --short > dist/working-tree-status.txt
+          find smarttube_work/smarttubetv/build/outputs/apk -type f -name '*.apk' -exec cp '{}' dist/ \;
+          cp smarttube_work/common/libs/libXray.aar dist/
+          git -C smarttube_work rev-parse HEAD > dist/source-commit.txt
+          git -C smarttube_work status --short > dist/working-tree-status.txt
           sha256sum dist/* > dist/SHA256SUMS.txt
           test -n "$(find dist -maxdepth 1 -name '*.apk' -print -quit)"
 
