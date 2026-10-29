@@ -67,47 +67,127 @@ jobs:
         run: |
           python3 -c '
           import os
-
-          # 1. Добавляем подавление конфликтов в корневой build.gradle
-          root_gradle = "build.gradle"
-          if os.path.exists(root_gradle):
-              with open(root_gradle, "r") as f:
+          props_path = "gradle.properties"
+          if os.path.exists(props_path):
+              with open(props_path, "r") as f:
                   content = f.read()
-              injection = """
-              subprojects {
-                  afterEvaluate { project ->
-                      if (project.hasProperty("android")) {
-                          project.android {
-                              if (namespace == null) {
-                                  // fallback if needed
-                              }
-                          }
-                      }
-                  }
-                  configurations.all {
-                      resolutionStrategy {
-                          force "org.chromium.net:cronet-embedded:105.5195.68"
-                      }
-                      exclude group: "org.chromium.net", module: "cronet-fallback"
-                  }
-              }
-              """
-              if "cronet-fallback" not in content:
-                  with open(root_gradle, "w") as f:
-                      f.write(content + "\n" + injection)
-                  print("Injected global exclusions into root build.gradle")
+              if "android.enforceUniquePackageName" not in content:
+                  with open(props_path, "a") as f:
+                      f.write("\nandroid.enforceUniquePackageName=false\n")
+                  print("Added android.enforceUniquePackageName=false")
+          '
 
-          # 2. Добавляем tools:node="merge" или override в AndroidManifest.xml если требуется
-          for root, dirs, files in os.walk("."):
-              for file in files:
-                if file == "AndroidManifest.xml":
-                    manifest_path = os.path.join(root, file)
-                    with open(manifest_path, "r") as mf:
-                        m_content = mf.read()
-                    if "package=\"org.chromium.net" in m_content and "xmlns:tools" not in m_content:
-                        m_content = m_content.replace("<manifest", "<manifest xmlns:tools=\"http://schemas.android.com/tools\"")
-                        with open(manifest_path, "w") as mf:
-                            mf.write(m_content)
+      - name: Prepare build and submodules
+        working-directory: smarttube_src
+        run: |
+          chmod +x ./tools/prepare-build.sh ./tools/build-libxray-aar.sh
+          ./tools/prepare-build.sh
+
+      - name: Build official libXray Android AAR
+        working-directory: smarttube_src
+        run: ./tools/build-libxray-aar.sh
+
+      - name: Build SmartTube APK
+        working-directory: smarttube_src
+        run: ./gradlew --no-daemon assembleStstableDebug
+
+      - name: Collect APK and build provenance
+        if: success()
+        shell: bash
+        run: |
+          mkdir -p dist
+          find smarttube_src/smarttubetv/build/outputs/apk -type f -name '*.apk' -exec cp '{}' dist/ \;
+          cp smarttube_src/common/libs/libXray.aar dist/
+          git -C smarttube_src rev-parse HEAD > dist/source-commit.txt
+          git -C smarttube_src status --short > dist/working-tree-status.txt
+          sha256sum dist/* > dist/SHA256SUMS.txt
+          test -n "$(find dist -maxdepth 1 -name '*.apk' -print -quit)"
+
+      - name: Upload APK, AAR and checksums
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smarttube-vless-fork-debug
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+name: Build SmartTube VLESS fork
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Clone SmartTube source and apply patch
+        run: |
+          git clone --depth 1 https://github.com/yuliskov/SmartTube.git smarttube_src
+          patch --batch --forward -p2 -d smarttube_src < SmartTube-security-vless-v9.patch
+
+      - name: Set up Java 17 for Android SDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Go for libXray
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Android SDK manually
+        run: |
+          export ANDROID_HOME=$HOME/android-sdk
+          mkdir -p $ANDROID_HOME/cmdline-tools
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O sdk-tools.zip
+          unzip -q sdk-tools.zip -d $ANDROID_HOME/cmdline-tools
+          mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
+          rm sdk-tools.zip
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
+
+      - name: Install Android SDK and NDK components
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager --install \
+            'platform-tools' \
+            'platforms;android-33' \
+            'build-tools;33.0.2' \
+            'ndk;21.0.6113669'
+
+      - name: Switch Java to 11 for legacy Gradle build
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+
+      - name: Fix Manifest Merger conflicts via Python
+        working-directory: smarttube_src
+        run: |
+          python3 -c '
+          import os
+          props_path = "gradle.properties"
+          if os.path.exists(props_path):
+              with open(props_path, "r") as f:
+                  content = f.read()
+              if "android.enforceUniquePackageName" not in content:
+                  with open(props_path, "a") as f:
+                      f.write("\nandroid.enforceUniquePackageName=false\n")
+                  print("Added android.enforceUniquePackageName=false")
           '
 
       - name: Prepare build and submodules
