@@ -43,15 +43,17 @@ jobs:
 
       - name: Install Android SDK components
         uses: android-actions/setup-android@v3
+        env:
+          SKIP_JDK_VERSION_CHECK: "true"
 
       - name: Install pinned Android SDK and NDK
         run: |
+          yes | sdkmanager --licenses >/dev/null
           sdkmanager --install \
             'platform-tools' \
             'platforms;android-33' \
             'build-tools;33.0.2' \
             'ndk;21.0.6113669'
-          yes | sdkmanager --licenses >/dev/null
 
       - name: Switch Java to 11 for legacy Gradle build
         uses: actions/setup-java@v4
