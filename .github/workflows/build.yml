@@ -62,22 +62,52 @@ jobs:
           distribution: temurin
           java-version: '11'
 
-      - name: Fix Cronet namespace conflict in build.gradle
+      - name: Fix Manifest Merger conflicts via Python
         working-directory: smarttube_src
         run: |
           python3 -c '
-          path = "smarttubetv/build.gradle"
-          with open(path, "r") as f:
-              content = f.read()
-          addition = """
-          configurations.all {
-              exclude group: "org.chromium.net", module: "cronet-fallback"
-          }
-          """
-          if "cronet-fallback" not in content:
-              with open(path, "w") as f:
-                  f.write(content + "\n" + addition)
-              print("Added exclusion for cronet-fallback")
+          import os
+
+          # 1. Добавляем подавление конфликтов в корневой build.gradle
+          root_gradle = "build.gradle"
+          if os.path.exists(root_gradle):
+              with open(root_gradle, "r") as f:
+                  content = f.read()
+              injection = """
+              subprojects {
+                  afterEvaluate { project ->
+                      if (project.hasProperty("android")) {
+                          project.android {
+                              if (namespace == null) {
+                                  // fallback if needed
+                              }
+                          }
+                      }
+                  }
+                  configurations.all {
+                      resolutionStrategy {
+                          force "org.chromium.net:cronet-embedded:105.5195.68"
+                      }
+                      exclude group: "org.chromium.net", module: "cronet-fallback"
+                  }
+              }
+              """
+              if "cronet-fallback" not in content:
+                  with open(root_gradle, "w") as f:
+                      f.write(content + "\n" + injection)
+                  print("Injected global exclusions into root build.gradle")
+
+          # 2. Добавляем tools:node="merge" или override в AndroidManifest.xml если требуется
+          for root, dirs, files in os.walk("."):
+              for file in files:
+                if file == "AndroidManifest.xml":
+                    manifest_path = os.path.join(root, file)
+                    with open(manifest_path, "r") as mf:
+                        m_content = mf.read()
+                    if "package=\"org.chromium.net" in m_content and "xmlns:tools" not in m_content:
+                        m_content = m_content.replace("<manifest", "<manifest xmlns:tools=\"http://schemas.android.com/tools\"")
+                        with open(manifest_path, "w") as mf:
+                            mf.write(m_content)
           '
 
       - name: Prepare build and submodules
