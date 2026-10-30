@@ -1,3 +1,4 @@
+
 name: Build SmartTube VLESS fork
 
 on:
@@ -63,68 +64,56 @@ jobs:
           distribution: temurin
           java-version: '11'
 
-      - name: Fix application minSdk
-        working-directory: smarttube_src
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-
-          manifest = Path("smarttubetv/src/main/AndroidManifest.xml")
-          if not manifest.exists():
-              raise SystemExit(f"Manifest not found: {manifest}")
-
-          text = manifest.read_text()
-
-          if "xmlns:android=" not in text:
-              raise SystemExit("Android namespace not found in manifest")
-
-          if "xmlns:tools=" not in text:
-              text = text.replace(
-                  "xmlns:android=",
-                  'xmlns:tools="http://schemas.android.com/tools"\n    xmlns:android=',
-                  1
-              )
-
-          text, count = re.subn(
-              r'<uses-sdk\b[^>]*/?>',
-              '<uses-sdk android:minSdkVersion="21" />',
-              text,
-              count=1
-          )
-
-          if count == 0:
-              text = re.sub(
-                  r'(<manifest\b[^>]*>)',
-                  r'\1\n    <uses-sdk android:minSdkVersion="21" />',
-                  text,
-                  count=1
-              )
-
-          manifest.write_text(text)
-          print("Updated application manifest minSdk to 21")
-          print("\n".join(line for line in text.splitlines() if "uses-sdk" in line))
-          PY
-
       - name: Prepare build and submodules
         working-directory: smarttube_src
         run: |
           chmod +x ./tools/prepare-build.sh ./tools/build-libxray-aar.sh
           ./tools/prepare-build.sh
 
+      - name: Fix minSdk in SmartTube Gradle configuration
+        working-directory: smarttube_src
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("smarttubetv/build.gradle")
+          if not path.exists():
+              raise SystemExit(f"File not found: {path}")
+
+          text = path.read_text()
+          old = "minSdkVersion project.properties.minSdkVersion"
+          new = "minSdkVersion 21"
+
+          if old in text:
+              text = text.replace(old, new, 1)
+              path.write_text(text)
+              print("SUCCESS: smarttubetv minSdk changed to 21")
+          elif new in text:
+              print("SUCCESS: minSdk is already 21")
+          else:
+              raise SystemExit(
+                  "ERROR: Expected minSdk declaration was not found. "
+                  "Build stopped to avoid using minSdk 17."
+              )
+
+          for line in text.splitlines():
+              if "minSdkVersion" in line:
+                  print(line.strip())
+          PY
+
       - name: Build libXray AAR
         working-directory: smarttube_src
         run: ./tools/build-libxray-aar.sh
 
-      - name: Verify minSdk
+      - name: Verify minSdk configuration
         working-directory: smarttube_src
         run: |
-          grep -n "uses-sdk" smarttubetv/src/main/AndroidManifest.xml
-          grep -n "minSdk" smarttubetv/build.gradle || true
+          grep -n "minSdkVersion" smarttubetv/build.gradle
+          grep -n "minSdkVersion" smarttubetv/src/main/AndroidManifest.xml || true
 
       - name: Build SmartTube APK
         working-directory: smarttube_src
-        run: ./gradlew --no-daemon assembleStstableDebug --stacktrace --info
+        run: ./gradlew --no-daemon assembleStstableDebug --stacktrace
 
       - name: Collect APK and checksums
         if: success()
