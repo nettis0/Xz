@@ -62,24 +62,23 @@ jobs:
           distribution: temurin
           java-version: '11'
 
-      - name: Fix Cronet Namespace Conflicts
+      - name: Raise minSdk to 21 for libXray compatibility
         working-directory: smarttube_src
         run: |
           python3 -c '
-          path = "smarttubetv/build.gradle"
-          with open(path, "r") as f:
-              content = f.read()
-          
-          exclusion_code = """
-          configurations.all {
-              exclude group: "org.chromium.net", module: "cronet-common"
-              exclude group: "org.chromium.net", module: "cronet-api"
-          }
-          """
-          if "cronet-common" not in content:
-              with open(path, "w") as f:
-                  f.write(content + "\n" + exclusion_code)
-              print("Successfully injected cronet exclusions.")
+          import os, re
+          for root, dirs, files in os.walk("."):
+              for file in files:
+                  if file == "build.gradle":
+                      path = os.path.join(root, file)
+                      with open(path, "r") as f:
+                          content = f.read()
+                      new_content = re.sub(r"minSdkVersion\s+(\d+)", lambda m: "minSdkVersion 21" if int(m.group(1)) < 21 else m.group(0), content)
+                      new_content = re.sub(r"minSdk\s*=\s*(\d+)", lambda m: "minSdk = 21" if int(m.group(1)) < 21 else m.group(0), new_content)
+                      if new_content != content:
+                          with open(path, "w") as f:
+                              f.write(new_content)
+                          print(f"Updated minSdkVersion in {path}")
           '
 
       - name: Prepare build and submodules
