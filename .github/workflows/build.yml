@@ -63,45 +63,47 @@ jobs:
           distribution: temurin
           java-version: '11'
 
-      - name: Raise minSdk to 21
+      - name: Fix application minSdk
         working-directory: smarttube_src
         run: |
           python3 - <<'PY'
-          import re
           from pathlib import Path
+          import re
 
-          candidates = [
-              Path("smarttubetv/build.gradle"),
-              Path("smarttubetv/build.gradle.kts"),
-          ]
+          manifest = Path("smarttubetv/src/main/AndroidManifest.xml")
+          if not manifest.exists():
+              raise SystemExit(f"Manifest not found: {manifest}")
 
-          changed = False
+          text = manifest.read_text()
 
-          for path in candidates:
-              if not path.exists():
-                  continue
+          if "xmlns:android=" not in text:
+              raise SystemExit("Android namespace not found in manifest")
 
-              text = path.read_text()
-              updated = re.sub(
-                  r'(?m)(minSdkVersion|minSdk)\s*(?:=\s*)?17\b',
-                  lambda m: m.group(1) + (' = ' if '=' in m.group(0) else ' ') + '21',
-                  text
+          if "xmlns:tools=" not in text:
+              text = text.replace(
+                  "xmlns:android=",
+                  'xmlns:tools="http://schemas.android.com/tools"\n    xmlns:android=',
+                  1
               )
 
-              if updated != text:
-                  path.write_text(updated)
-                  print(f"Updated {path}")
-                  changed = True
+          text, count = re.subn(
+              r'<uses-sdk\b[^>]*/?>',
+              '<uses-sdk android:minSdkVersion="21" />',
+              text,
+              count=1
+          )
 
-          if not changed:
-              print("No minSdk 17 declaration found in smarttubetv module.")
-              print("Relevant declarations:")
-              for path in Path(".").rglob("build.gradle*"):
-                  if any(part.startswith(".") for part in path.parts):
-                      continue
-                  for number, line in enumerate(path.read_text(errors="ignore").splitlines(), 1):
-                      if "minSdk" in line:
-                          print(f"{path}:{number}: {line.strip()}")
+          if count == 0:
+              text = re.sub(
+                  r'(<manifest\b[^>]*>)',
+                  r'\1\n    <uses-sdk android:minSdkVersion="21" />',
+                  text,
+                  count=1
+              )
+
+          manifest.write_text(text)
+          print("Updated application manifest minSdk to 21")
+          print("\n".join(line for line in text.splitlines() if "uses-sdk" in line))
           PY
 
       - name: Prepare build and submodules
@@ -114,23 +116,26 @@ jobs:
         working-directory: smarttube_src
         run: ./tools/build-libxray-aar.sh
 
+      - name: Verify minSdk
+        working-directory: smarttube_src
+        run: |
+          grep -n "uses-sdk" smarttubetv/src/main/AndroidManifest.xml
+          grep -n "minSdk" smarttubetv/build.gradle || true
+
       - name: Build SmartTube APK
         working-directory: smarttube_src
         run: ./gradlew --no-daemon assembleStstableDebug --stacktrace --info
 
-      - name: Collect APK and build provenance
+      - name: Collect APK and checksums
         if: success()
-        shell: bash
         run: |
           mkdir -p dist
           find smarttube_src/smarttubetv/build/outputs/apk -type f -name '*.apk' -exec cp '{}' dist/ \;
           cp smarttube_src/common/libs/libXray.aar dist/
-          git -C smarttube_src rev-parse HEAD > dist/source-commit.txt
-          git -C smarttube_src status --short > dist/working-tree-status.txt
           sha256sum dist/* > dist/SHA256SUMS.txt
           test -n "$(find dist -maxdepth 1 -name '*.apk' -print -quit)"
 
-      - name: Upload APK, AAR and checksums
+      - name: Upload APK and AAR
         if: success()
         uses: actions/upload-artifact@v4
         with:
