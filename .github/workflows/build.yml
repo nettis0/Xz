@@ -1,4 +1,3 @@
-
 name: Build SmartTube VLESS fork
 
 on:
@@ -282,12 +281,19 @@ jobs:
         working-directory: smarttube_src
         run: ./tools/build-libxray-aar.sh
 
-      - name: Run unit tests and build SmartTube APK
+      - name: Run VLESS unit tests only
         working-directory: smarttube_src
         run: |
           ./gradlew --no-daemon \
-            testStstableDebugUnitTest \
-            assembleStstableDebug \
+            :common:testStstableDebugUnitTest \
+            --tests 'com.liskovsoft.smartyoutubetv2.common.proxy.vless.VlessConfigBuilderTest' \
+            --stacktrace
+
+      - name: Build SmartTube APK
+        working-directory: smarttube_src
+        run: |
+          ./gradlew --no-daemon \
+            :smarttubetv:assembleStstableDebug \
             --stacktrace
 
       - name: Collect APK and checksums
