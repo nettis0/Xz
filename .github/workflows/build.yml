@@ -74,12 +74,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
-          FILE="MediaServiceCore/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/innertube/utils/PlayerResultExtensions.kt"
-
-          if [ ! -f "$FILE" ]; then
-            echo "File not found: $FILE"
-            find . -name PlayerResultExtensions.kt
+          FILE="$(find . -type f -name PlayerResultExtensions.kt -print -quit)"
+          if [ -z "$FILE" ]; then
+            echo "PlayerResultExtensions.kt was not found."
             exit 1
           fi
 
@@ -88,25 +85,24 @@ jobs:
           import sys
 
           path = Path(sys.argv[1])
-          text = path.read_text()
-
+          source = path.read_text()
           old = "Helpers.containsIgnoreCase(dubbedLanguages, track.languageCode)"
           new = "dubbedLanguages.any { it.equals(track.languageCode, ignoreCase = true) }"
 
-          if old not in text:
-              if new in text:
-                  print("Compatibility fix already applied.")
-              else:
-                  raise SystemExit("Expected Kotlin expression was not found.")
-          else:
-              path.write_text(text.replace(old, new))
+          if old in source:
+              path.write_text(source.replace(old, new))
               print("Kotlin compatibility fix applied.")
+          elif new in source:
+              print("Compatibility fix already present.")
+          else:
+              raise SystemExit("Expected expression not found.")
           PY
 
       - name: Set minSdk to 21 for libXray compatibility
         working-directory: smarttube_src
         shell: bash
         run: |
+          set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
 
@@ -114,16 +110,13 @@ jobs:
               Path("smarttubetv/build.gradle"),
               Path("common/build.gradle")
           ]
-
           changed = []
 
           for path in candidates:
               if not path.exists():
                   continue
-
               data = path.read_text()
               old = "minSdkVersion project.properties.minSdkVersion"
-
               if old in data:
                   path.write_text(data.replace(old, "minSdkVersion 21"))
                   changed.append(str(path))
@@ -152,185 +145,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-
-          find smarttube_src/smarttubetv/build/outputs/apk \
-            -type f -name '*.apk' -exec cp '{}' dist/ \;
-
+          find smarttube_src/smarttubetv/build/outputs/apk -type f -name '*.apk' -exec cp '{}' dist/ \;
           cp smarttube_src/common/libs/libXray.aar dist/
-
           sha256sum dist/* > dist/SHA256SUMS.txt
-
-          test -n "$(find dist -maxdepth 1 -name '*.apk' -print -quit)"
-
-      - name: Upload APK and AAR
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: smarttube-vless-fork-debug
-          path: dist/
-          if-no-files-found: error
-          retention-days: 14name: Build SmartTube VLESS fork
-
-on:
-  workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/build.yml'
-      - 'SmartTube-security-vless-v10.patch'
-
-permissions:
-  contents: read
-
-jobs:
-  build:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 120
-
-    steps:
-      - name: Check out fork
-        uses: actions/checkout@v4
-
-      - name: Clone SmartTube source and apply v10 patch
-        shell: bash
-        run: |
-          set -euo pipefail
-          git clone --depth 1 https://github.com/yuliskov/SmartTube.git smarttube_src
-          patch --batch --forward --fuzz=0 -p2 -d smarttube_src < SmartTube-security-vless-v10.patch
-
-      - name: Set up Java 17 for Android SDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: platform-tools
-
-      - name: Install Android SDK and NDK
-        run: |
-          yes | sdkmanager --licenses
-          sdkmanager --install \
-            'platform-tools' \
-            'platforms;android-33' \
-            'build-tools;33.0.2' \
-            'ndk;21.0.6113669'
-
-      - name: Switch to Java 11 for SmartTube
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '11'
-
-      - name: Set up Go for libXray
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.25.x'
-          cache: false
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Prepare SmartTube dependencies
-        working-directory: smarttube_src
-        run: |
-          chmod +x tools/prepare-build.sh tools/build-libxray-aar.sh
-          ./tools/prepare-build.sh
-
-      - name: Fix SharedModules Kotlin compatibility
-        working-directory: smarttube_src
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          FILE="MediaServiceCore/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/innertube/utils/PlayerResultExtensions.kt"
-
-          if [ ! -f "$FILE" ]; then
-            echo "File not found: $FILE"
-            find . -name PlayerResultExtensions.kt
-            exit 1
-          fi
-
-          python3 - "$FILE" <<'PY'
-          from pathlib import Path
-          import sys
-
-          path = Path(sys.argv[1])
-          text = path.read_text()
-
-          old = "Helpers.containsIgnoreCase(dubbedLanguages, track.languageCode)"
-          new = "dubbedLanguages.any { it.equals(track.languageCode, ignoreCase = true) }"
-
-          if old not in text:
-              if new in text:
-                  print("Compatibility fix already applied.")
-              else:
-                  raise SystemExit("Expected Kotlin expression was not found.")
-          else:
-              path.write_text(text.replace(old, new))
-              print("Kotlin compatibility fix applied.")
-          PY
-
-      - name: Set minSdk to 21 for libXray compatibility
-        working-directory: smarttube_src
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          candidates = [
-              Path("smarttubetv/build.gradle"),
-              Path("common/build.gradle")
-          ]
-
-          changed = []
-
-          for path in candidates:
-              if not path.exists():
-                  continue
-
-              data = path.read_text()
-              old = "minSdkVersion project.properties.minSdkVersion"
-
-              if old in data:
-                  path.write_text(data.replace(old, "minSdkVersion 21"))
-                  changed.append(str(path))
-
-          if not changed:
-              raise SystemExit("Could not find the expected minSdk declaration.")
-
-          print("Updated minSdk to 21 in: " + ", ".join(changed))
-          PY
-
-      - name: Build libXray AAR
-        working-directory: smarttube_src
-        run: ./tools/build-libxray-aar.sh
-
-      - name: Run unit tests and build SmartTube APK
-        working-directory: smarttube_src
-        run: |
-          ./gradlew --no-daemon \
-            testStstableDebugUnitTest \
-            assembleStstableDebug \
-            --stacktrace
-
-      - name: Collect APK and checksums
-        if: success()
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-
-          find smarttube_src/smarttubetv/build/outputs/apk \
-            -type f -name '*.apk' -exec cp '{}' dist/ \;
-
-          cp smarttube_src/common/libs/libXray.aar dist/
-
-          sha256sum dist/* > dist/SHA256SUMS.txt
-
           test -n "$(find dist -maxdepth 1 -name '*.apk' -print -quit)"
 
       - name: Upload APK and AAR
