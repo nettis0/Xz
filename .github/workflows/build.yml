@@ -1,31 +1,38 @@
-
 name: Build SmartTube VLESS fork
 
 on:
   workflow_dispatch:
   push:
+    paths:
+      - '.github/workflows/build.yml'
+      - 'SmartTube-security-vless-v10.patch'
+
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 90
+    timeout-minutes: 120
 
     steps:
-      - name: Check out repository
+      - name: Check out fork
         uses: actions/checkout@v4
 
-      - name: Clone SmartTube source and apply patch
+      - name: Clone SmartTube source and apply v10 patch
+        shell: bash
         run: |
+          set -euo pipefail
           git clone --depth 1 https://github.com/yuliskov/SmartTube.git smarttube_src
-          patch --batch --forward -p2 -d smarttube_src < SmartTube-security-vless-v9.patch
+          patch --batch --forward --fuzz=0 -p2 -d smarttube_src < SmartTube-security-vless-v10.patch
 
-      - name: Set up Java 17
+      - name: Set up Java 11
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '11'
 
-      - name: Set up Go
+      - name: Set up Go for libXray
         uses: actions/setup-go@v5
         with:
           go-version: '1.25.x'
@@ -37,17 +44,7 @@ jobs:
           python-version: '3.11'
 
       - name: Set up Android SDK
-        run: |
-          export ANDROID_HOME=$HOME/android-sdk
-          mkdir -p "$ANDROID_HOME/cmdline-tools"
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O sdk-tools.zip
-          unzip -q sdk-tools.zip -d "$ANDROID_HOME/cmdline-tools"
-          mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
-          rm sdk-tools.zip
-          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
-          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+        uses: android-actions/setup-android@v3
 
       - name: Install Android SDK and NDK
         run: |
@@ -58,70 +55,74 @@ jobs:
             'build-tools;33.0.2' \
             'ndk;21.0.6113669'
 
-      - name: Switch Java to 11
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '11'
-
-      - name: Prepare build and submodules
+      - name: Prepare SmartTube dependencies
         working-directory: smarttube_src
         run: |
-          chmod +x ./tools/prepare-build.sh ./tools/build-libxray-aar.sh
+          chmod +x tools/prepare-build.sh tools/build-libxray-aar.sh
           ./tools/prepare-build.sh
 
-      - name: Fix minSdk in SmartTube Gradle configuration
+      - name: Set minSdk to 21 for libXray compatibility
         working-directory: smarttube_src
+        shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
-          path = Path("smarttubetv/build.gradle")
-          if not path.exists():
-              raise SystemExit(f"File not found: {path}")
+          candidates = [
+              Path("smarttubetv/build.gradle"),
+              Path("common/build.gradle")
+          ]
 
-          text = path.read_text()
-          old = "minSdkVersion project.properties.minSdkVersion"
-          new = "minSdkVersion 21"
+          changed = []
 
-          if old in text:
-              text = text.replace(old, new, 1)
-              path.write_text(text)
-              print("SUCCESS: smarttubetv minSdk changed to 21")
-          elif new in text:
-              print("SUCCESS: minSdk is already 21")
-          else:
+          for path in candidates:
+              if not path.exists():
+                  continue
+
+              data = path.read_text()
+              old = "minSdkVersion project.properties.minSdkVersion"
+
+              if old in data:
+                  path.write_text(
+                      data.replace(old, "minSdkVersion 21")
+                  )
+                  changed.append(str(path))
+
+          if not changed:
               raise SystemExit(
-                  "ERROR: Expected minSdk declaration was not found. "
-                  "Build stopped to avoid using minSdk 17."
+                  "Could not find the expected minSdk declaration; stopping safely."
               )
 
-          for line in text.splitlines():
-              if "minSdkVersion" in line:
-                  print(line.strip())
+          print("Updated minSdk to 21 in: " + ", ".join(changed))
           PY
 
       - name: Build libXray AAR
         working-directory: smarttube_src
         run: ./tools/build-libxray-aar.sh
 
-      - name: Verify minSdk configuration
+      - name: Run unit tests and build SmartTube APK
         working-directory: smarttube_src
         run: |
-          grep -n "minSdkVersion" smarttubetv/build.gradle
-          grep -n "minSdkVersion" smarttubetv/src/main/AndroidManifest.xml || true
-
-      - name: Build SmartTube APK
-        working-directory: smarttube_src
-        run: ./gradlew --no-daemon assembleStstableDebug --stacktrace
+          ./gradlew --no-daemon \
+            testStstableDebugUnitTest \
+            assembleStstableDebug \
+            --stacktrace
 
       - name: Collect APK and checksums
         if: success()
+        shell: bash
         run: |
+          set -euo pipefail
+
           mkdir -p dist
-          find smarttube_src/smarttubetv/build/outputs/apk -type f -name '*.apk' -exec cp '{}' dist/ \;
+
+          find smarttube_src/smarttubetv/build/outputs/apk \
+            -type f -name '*.apk' -exec cp '{}' dist/ \;
+
           cp smarttube_src/common/libs/libXray.aar dist/
+
           sha256sum dist/* > dist/SHA256SUMS.txt
+
           test -n "$(find dist -maxdepth 1 -name '*.apk' -print -quit)"
 
       - name: Upload APK and AAR
