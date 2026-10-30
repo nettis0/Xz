@@ -1,3 +1,4 @@
+
 name: Build SmartTube VLESS fork
 
 on:
@@ -75,10 +76,7 @@ jobs:
         run: |
           set -euo pipefail
           FILE="$(find . -type f -name PlayerResultExtensions.kt -print -quit)"
-          if [ -z "$FILE" ]; then
-            echo "PlayerResultExtensions.kt was not found."
-            exit 1
-          fi
+          test -n "$FILE"
 
           python3 - "$FILE" <<'PY'
           from pathlib import Path
@@ -90,12 +88,70 @@ jobs:
           new = "dubbedLanguages.any { it.equals(track.languageCode, ignoreCase = true) }"
 
           if old in source:
-              path.write_text(source.replace(old, new))
-              print("Kotlin compatibility fix applied.")
-          elif new in source:
-              print("Compatibility fix already present.")
-          else:
-              raise SystemExit("Expected expression not found.")
+              source = source.replace(old, new)
+          elif new not in source:
+              raise SystemExit("Expected Kotlin expression not found.")
+
+          path.write_text(source)
+          print("Kotlin compatibility fix applied.")
+          PY
+
+      - name: Fix MediaServiceCore Java compatibility
+        working-directory: smarttube_src
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path(
+              "MediaServiceCore/youtubeapi/src/main/java/com/liskovsoft/"
+              "youtubeapi/videoinfo/models/VideoInfo.java"
+          )
+
+          source = path.read_text()
+
+          replacements = {
+              "!Helpers.isNullOrEmpty(mTranslationLanguages) && !Helpers.isNullOrEmpty(mCaptionTracks)":
+              "mTranslationLanguages != null && !mTranslationLanguages.isEmpty() && "
+              "mCaptionTracks != null && !mCaptionTracks.isEmpty()",
+
+              "!Helpers.containsIgnoreCase(dubbedLanguages, track.getLanguageCode())":
+              "!containsIgnoreCase(dubbedLanguages, track.getLanguageCode())"
+          }
+
+          for old, new in replacements.items():
+              if old in source:
+                  source = source.replace(old, new)
+              elif new not in source:
+                  raise SystemExit("Expected Java expression not found: " + old)
+
+          marker = "    private CaptionTrack findOriginTrack(List<CaptionTrack> captionTracks) {"
+
+          helper = """    private boolean containsIgnoreCase(List<String> values, String value) {
+              if (values == null || value == null) {
+                  return false;
+              }
+
+              for (String item : values) {
+                  if (item != null && item.equalsIgnoreCase(value)) {
+                      return true;
+                  }
+              }
+
+              return false;
+          }
+
+          """
+
+          if "private boolean containsIgnoreCase(List<String> values, String value)" not in source:
+              if marker not in source:
+                  raise SystemExit("Could not find insertion point for Java helper.")
+              source = source.replace(marker, helper + marker)
+
+          path.write_text(source)
+          print("VideoInfo.java compatibility fixes applied.")
           PY
 
       - name: Set minSdk to 21 for libXray compatibility
@@ -103,20 +159,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
+          python3 <<'PY'
           from pathlib import Path
 
           candidates = [
               Path("smarttubetv/build.gradle"),
               Path("common/build.gradle")
           ]
+
           changed = []
 
           for path in candidates:
               if not path.exists():
                   continue
+
               data = path.read_text()
               old = "minSdkVersion project.properties.minSdkVersion"
+
               if old in data:
                   path.write_text(data.replace(old, "minSdkVersion 21"))
                   changed.append(str(path))
