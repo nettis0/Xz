@@ -96,6 +96,59 @@ jobs:
           print("Kotlin compatibility fix applied.")
           PY
 
+      - name: Fix SharedModules Android Auto compatibility
+        working-directory: smarttube_src
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          FILE="$(find SharedModules -type f -path '*/sharedutils/helpers/Helpers.java' -print -quit)"
+          test -n "$FILE"
+
+          python3 - "$FILE" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          source = path.read_text()
+
+          field = "    private static Boolean sIsAndroidAuto;"
+
+          method = """
+              public static boolean isAndroidAuto() {
+                  if (sIsAndroidAuto != null) {
+                      return sIsAndroidAuto;
+                  }
+
+                  sIsAndroidAuto = Helpers.equalsAny(
+                      Helpers.getDeviceName(), "rkpx3 (rkpx3)"
+                  );
+
+                  return sIsAndroidAuto;
+              }
+          """
+
+          if "public static boolean isAndroidAuto()" not in source:
+              class_marker = "public final class Helpers {"
+              if class_marker not in source:
+                  raise SystemExit("Helpers class declaration not found.")
+
+              source = source.replace(
+                  class_marker,
+                  class_marker + "\n" + field,
+                  1
+              )
+
+              closing = source.rfind("}")
+              if closing < 0:
+                  raise SystemExit("Helpers class closing brace not found.")
+
+              source = source[:closing] + method + "\n" + source[closing:]
+
+          path.write_text(source)
+          print("Android Auto compatibility fix applied.")
+          PY
+
       - name: Fix MediaServiceCore Java compatibility
         working-directory: smarttube_src
         shell: bash
