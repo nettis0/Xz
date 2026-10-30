@@ -8,6 +8,7 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     timeout-minutes: 90
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -17,13 +18,13 @@ jobs:
           git clone --depth 1 https://github.com/yuliskov/SmartTube.git smarttube_src
           patch --batch --forward -p2 -d smarttube_src < SmartTube-security-vless-v9.patch
 
-      - name: Set up Java 17 for Android SDK
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Go for libXray
+      - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.25.x'
@@ -34,20 +35,20 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Set up Android SDK manually
+      - name: Set up Android SDK
         run: |
           export ANDROID_HOME=$HOME/android-sdk
-          mkdir -p $ANDROID_HOME/cmdline-tools
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O sdk-tools.zip
-          unzip -q sdk-tools.zip -d $ANDROID_HOME/cmdline-tools
-          mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
+          unzip -q sdk-tools.zip -d "$ANDROID_HOME/cmdline-tools"
+          mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
           rm sdk-tools.zip
-          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
-          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
-          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
-          echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
 
-      - name: Install Android SDK and NDK components
+      - name: Install Android SDK and NDK
         run: |
           yes | sdkmanager --licenses >/dev/null
           sdkmanager --install \
@@ -56,30 +57,52 @@ jobs:
             'build-tools;33.0.2' \
             'ndk;21.0.6113669'
 
-      - name: Switch Java to 11 for legacy Gradle build
+      - name: Switch Java to 11
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '11'
 
-      - name: Raise minSdk to 21 for libXray compatibility
+      - name: Raise minSdk to 21
         working-directory: smarttube_src
         run: |
-          python3 -c '
-          import os, re
-          for root, dirs, files in os.walk("."):
-              for file in files:
-                  if file == "build.gradle":
-                      path = os.path.join(root, file)
-                      with open(path, "r") as f:
-                          content = f.read()
-                      new_content = re.sub(r"minSdkVersion\s+(\d+)", lambda m: "minSdkVersion 21" if int(m.group(1)) < 21 else m.group(0), content)
-                      new_content = re.sub(r"minSdk\s*=\s*(\d+)", lambda m: "minSdk = 21" if int(m.group(1)) < 21 else m.group(0), new_content)
-                      if new_content != content:
-                          with open(path, "w") as f:
-                              f.write(new_content)
-                          print(f"Updated minSdkVersion in {path}")
-          '
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          candidates = [
+              Path("smarttubetv/build.gradle"),
+              Path("smarttubetv/build.gradle.kts"),
+          ]
+
+          changed = False
+
+          for path in candidates:
+              if not path.exists():
+                  continue
+
+              text = path.read_text()
+              updated = re.sub(
+                  r'(?m)(minSdkVersion|minSdk)\s*(?:=\s*)?17\b',
+                  lambda m: m.group(1) + (' = ' if '=' in m.group(0) else ' ') + '21',
+                  text
+              )
+
+              if updated != text:
+                  path.write_text(updated)
+                  print(f"Updated {path}")
+                  changed = True
+
+          if not changed:
+              print("No minSdk 17 declaration found in smarttubetv module.")
+              print("Relevant declarations:")
+              for path in Path(".").rglob("build.gradle*"):
+                  if any(part.startswith(".") for part in path.parts):
+                      continue
+                  for number, line in enumerate(path.read_text(errors="ignore").splitlines(), 1):
+                      if "minSdk" in line:
+                          print(f"{path}:{number}: {line.strip()}")
+          PY
 
       - name: Prepare build and submodules
         working-directory: smarttube_src
@@ -87,13 +110,13 @@ jobs:
           chmod +x ./tools/prepare-build.sh ./tools/build-libxray-aar.sh
           ./tools/prepare-build.sh
 
-      - name: Build official libXray Android AAR
+      - name: Build libXray AAR
         working-directory: smarttube_src
         run: ./tools/build-libxray-aar.sh
 
       - name: Build SmartTube APK
         working-directory: smarttube_src
-        run: ./gradlew --no-daemon assembleStstableDebug
+        run: ./gradlew --no-daemon assembleStstableDebug --stacktrace --info
 
       - name: Collect APK and build provenance
         if: success()
