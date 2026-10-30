@@ -207,6 +207,45 @@ jobs:
           print("VideoInfo.java compatibility fixes applied.")
           PY
 
+      - name: Fix VLESS tests to use Robolectric
+        working-directory: smarttube_src
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          FILE="common/src/test/java/com/liskovsoft/smartyoutubetv2/common/proxy/vless/VlessConfigBuilderTest.java"
+          test -f "$FILE"
+
+          python3 - "$FILE" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          source = path.read_text()
+
+          junit_import = "import org.junit.Test;"
+          robo_imports = (
+              "import org.junit.runner.RunWith;\n"
+              "import org.robolectric.RobolectricTestRunner;"
+          )
+
+          if "import org.robolectric.RobolectricTestRunner;" not in source:
+              if junit_import not in source:
+                  raise SystemExit("JUnit import not found.")
+              source = source.replace(junit_import, junit_import + "\n" + robo_imports, 1)
+
+          class_marker = "public class VlessConfigBuilderTest {"
+          annotated_class = "@RunWith(RobolectricTestRunner.class)\n" + class_marker
+
+          if "@RunWith(RobolectricTestRunner.class)" not in source:
+              if class_marker not in source:
+                  raise SystemExit("VLESS test class declaration not found.")
+              source = source.replace(class_marker, annotated_class, 1)
+
+          path.write_text(source)
+          print("VLESS tests configured to run with Robolectric.")
+          PY
+
       - name: Set minSdk to 21 for libXray compatibility
         working-directory: smarttube_src
         shell: bash
