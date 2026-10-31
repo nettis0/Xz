@@ -1,4 +1,4 @@
-name: Build SmartTube VLESS fork
+name: Build SmartTube Modern UI + VLESS
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
     paths:
       - '.github/workflows/build.yml'
       - 'SmartTube-security-vless-v10.patch'
-      - 'tools/apply-ui-customization.py'
+      - 'tools/apply-modern-ui-config.py'
 
 permissions:
   contents: read
@@ -20,15 +20,21 @@ jobs:
       - name: Check out fork
         uses: actions/checkout@v4
 
-      - name: Clone SmartTube source and apply v10 patch
+      - name: Clone SmartTube modern UI source and apply VLESS patch
         shell: bash
         run: |
           set -euo pipefail
-          git clone --depth 1 https://github.com/yuliskov/SmartTube.git smarttube_src
+          git clone --depth 1 --branch feature/modern-ui https://github.com/mramundo/SmartTube.git smarttube_src
+          EXPECTED_COMMIT='eebce9afde01e658b8d7b94464f35cc3b8f9e9df'
+          ACTUAL_COMMIT="$(git -C smarttube_src rev-parse HEAD)"
+          if [ "$ACTUAL_COMMIT" != "$EXPECTED_COMMIT" ]; then
+            echo "Unexpected modern UI source revision: $ACTUAL_COMMIT"
+            exit 1
+          fi
           patch --batch --forward --fuzz=0 -p2 -d smarttube_src < SmartTube-security-vless-v10.patch
 
-      - name: Apply YouTube-style UI customization
-        run: python3 ../tools/apply-ui-customization.py
+      - name: Apply modern UI navigation configuration
+        run: python3 ../tools/apply-modern-ui-config.py
         working-directory: smarttube_src
 
       - name: Set up Java 17 for Android SDK
@@ -282,6 +288,16 @@ jobs:
           print("Updated minSdk to 21 in: " + ", ".join(changed))
           PY
 
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('smarttube_src/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
       - name: Build libXray AAR
         working-directory: smarttube_src
         run: ./tools/build-libxray-aar.sh
@@ -292,6 +308,7 @@ jobs:
           ./gradlew --no-daemon \
             :common:testStstableDebugUnitTest \
             --tests 'com.liskovsoft.smartyoutubetv2.common.proxy.vless.VlessConfigBuilderTest' \
+            --tests 'com.liskovsoft.smartyoutubetv2.common.prefs.MainUIDataModernUiTest' \
             --stacktrace
 
       - name: Build SmartTube APK
