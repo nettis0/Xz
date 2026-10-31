@@ -244,6 +244,41 @@ def playback_optimization(source):
     return source
 
 
+
+def card_image_optimization(source):
+    source = replace_once(
+        source,
+        "import android.view.LayoutInflater;\n",
+        "import android.view.LayoutInflater;\nimport android.view.View;\n",
+        "Inspect the thumbnail container for its target size"
+    )
+    source = replace_once(
+        source,
+        ".diskCacheStrategy(VERSION.SDK_INT > 21 ? DiskCacheStrategy.ALL : DiskCacheStrategy.NONE)",
+        ".diskCacheStrategy(VERSION.SDK_INT > 21 ? DiskCacheStrategy.RESOURCE : DiskCacheStrategy.NONE)",
+        "Cache decoded card thumbnails without duplicating original and transformed files"
+    )
+    source = replace_once(
+        source,
+        """        if (card.getKind() == ModernVideoCard.KIND_PLAYLIST) {
+            request = request.listener(new StackColorListener(card));
+        }""",
+        """        // Decode at the visible tile size instead of retaining an oversized source bitmap.
+        View thumbContainer = (View) card.getThumbView().getParent();
+        if (thumbContainer != null) {
+            ViewGroup.LayoutParams thumbSize = thumbContainer.getLayoutParams();
+            if (thumbSize != null && thumbSize.width > 0 && thumbSize.height > 0) {
+                request = request.override(thumbSize.width, thumbSize.height);
+            }
+        }
+
+        if (card.getKind() == ModernVideoCard.KIND_PLAYLIST) {
+            request = request.listener(new StackColorListener(card));
+        }""",
+        "Downsample every home, shelf and player-suggestion thumbnail to its rendered size"
+    )
+    return source
+
 edit(
     "common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/BrowsePresenter.java",
     sidebar
@@ -272,5 +307,9 @@ edit(
     "smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/modern/playback/ModernPlaybackFragment.java",
     playback_optimization
 )
+edit(
+    "smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/modern/widgets/ModernCardPresenter.java",
+    card_image_optimization
+)
 
-print("Modern YouTube TV pass applied: modern player routing, vertical Shorts side rail and D-pad navigation, plus playback image/prefetch optimizations.")
+print("Modern YouTube TV pass applied: modern player routing, vertical Shorts side rail and D-pad navigation, plus app-wide thumbnail and playback optimizations.")
