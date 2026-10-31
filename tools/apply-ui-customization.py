@@ -351,7 +351,36 @@ def youtube_tv_nav_title(source):
 def youtube_tv_title_layout(source, rtl=False):
     if "voice_search_orb" in source:
         return source
+
+    # Rewire the existing focus chain before inserting the new orb, so the
+    # original and new attributes cannot collide.
+    title_id = 'android:id="@+id/title_orb"'
+    account_id = 'android:id="@+id/account_orb"'
+    old_title_focus = 'android:nextFocusLeft="@id/account_orb"' if rtl else 'android:nextFocusRight="@id/account_orb"'
+    new_title_focus = 'android:nextFocusLeft="@id/voice_search_orb"' if rtl else 'android:nextFocusRight="@id/voice_search_orb"'
+    old_account_focus = 'android:nextFocusRight="@id/title_orb"' if rtl else 'android:nextFocusLeft="@id/title_orb"'
+    new_account_focus = 'android:nextFocusRight="@id/voice_search_orb"' if rtl else 'android:nextFocusLeft="@id/voice_search_orb"'
+
+    title_pos = source.find(title_id)
+    if title_pos < 0:
+        raise SystemExit("YouTube TV title layout: title orb not found")
+    focus_pos = source.find(old_title_focus, title_pos)
+    if focus_pos < 0:
+        raise SystemExit("YouTube TV title layout: title focus link not found")
+    source = source[:focus_pos] + new_title_focus + source[focus_pos + len(old_title_focus):]
+
+    account_pos = source.find(account_id)
+    if account_pos < 0:
+        raise SystemExit("YouTube TV title layout: account orb not found")
+    focus_pos = source.find(old_account_focus, account_pos)
+    if focus_pos < 0:
+        raise SystemExit("YouTube TV title layout: account focus link not found")
+    source = source[:focus_pos] + new_account_focus + source[focus_pos + len(old_account_focus):]
+
     marker = "        <com.liskovsoft.smartyoutubetv2.tv.ui.widgets.search.LongClickSearchOrbView"
+    if marker not in source:
+        raise SystemExit("YouTube TV title layout: account orb insertion point not found")
+
     focus_left = "@id/account_orb" if rtl else "@id/title_orb"
     focus_right = "@id/title_orb" if rtl else "@id/account_orb"
     mic = (
@@ -369,16 +398,7 @@ def youtube_tv_title_layout(source, rtl=False):
         "            app:searchOrbBrightColor=\"@color/orb_bright_color\"\n"
         "            app:searchOrbIconColor=\"@color/orb_icon_color\" />\n\n"
     )
-    if marker not in source:
-        raise SystemExit("YouTube TV title layout: account orb insertion point not found")
-    source = source.replace(marker, mic + marker, 1)
-    old = 'android:nextFocusRight="@id/account_orb"' if not rtl else 'android:nextFocusLeft="@id/account_orb"'
-    new = 'android:nextFocusRight="@id/voice_search_orb"' if not rtl else 'android:nextFocusLeft="@id/voice_search_orb"'
-    source = replace_once(source, old, new, "Connect title search orb to voice search focus")
-    old_account = 'android:nextFocusLeft="@id/title_orb"' if not rtl else 'android:nextFocusRight="@id/title_orb"'
-    new_account = 'android:nextFocusLeft="@id/voice_search_orb"' if not rtl else 'android:nextFocusRight="@id/voice_search_orb"'
-    source = replace_once(source, old_account, new_account, "Connect account orb focus after voice search")
-    return source
+    return source.replace(marker, mic + marker, 1)
 
 def youtube_tv_header_presenter(source):
     source = replace_once(
