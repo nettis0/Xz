@@ -9,6 +9,7 @@ on:
       - 'tools/apply-modern-ui-config.py'
       - 'tools/fix-shorts-ui.py'
       - 'tools/apply-release-v11.py'
+      - 'tools/apply-shorts-continuation-v11.py'
       - 'tools/verify-release-v11.py'
 
 permissions:
@@ -46,6 +47,10 @@ jobs:
 
       - name: Apply Shorts v11 feed, gestures, microphone and settings fixes
         run: python3 ../tools/apply-release-v11.py
+        working-directory: smarttube_src
+
+      - name: Continue Shorts playback across feed pages
+        run: python3 ../tools/apply-shorts-continuation-v11.py
         working-directory: smarttube_src
 
       - name: Verify v11 UI changes and preserved settings
