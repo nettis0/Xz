@@ -54,7 +54,8 @@ def sidebar(source):
                     MediaGroup.TYPE_SHORTS,
                     MediaGroup.TYPE_KIDS_HOME,
                     MediaGroup.TYPE_SUBSCRIPTIONS,
-                    MediaGroup.TYPE_HISTORY
+                    MediaGroup.TYPE_HISTORY,
+                    MediaGroup.TYPE_SETTINGS
             })) {
                 return true;
             }
@@ -161,7 +162,7 @@ def browse_fragment(source):
     source = replace_once(
         source,
         "import android.view.ViewGroup;\n",
-        "import android.view.ViewGroup;\nimport android.view.Gravity;\nimport android.widget.FrameLayout;\nimport android.widget.ImageButton;\n",
+        "import android.view.ViewGroup;\nimport android.view.Gravity;\nimport android.graphics.Color;\nimport android.graphics.PorterDuff;\nimport android.graphics.drawable.GradientDrawable;\nimport android.widget.FrameLayout;\nimport android.widget.ImageButton;\n",
         "Add voice search view imports"
     )
     old = """        mProgressBarManager.setRootView((ViewGroup) root);
@@ -176,12 +177,20 @@ def browse_fragment(source):
             voiceSearch.setContentDescription("Voice search");
             voiceSearch.setFocusable(true);
             voiceSearch.setClickable(true);
-            voiceSearch.setBackgroundResource(android.R.drawable.btn_default);
+            float density = getResources().getDisplayMetrics().density;
+            int buttonSize = (int) (48 * density + 0.5f);
+            int inset = (int) (11 * density + 0.5f);
+            GradientDrawable micBackground = new GradientDrawable();
+            micBackground.setShape(GradientDrawable.OVAL);
+            micBackground.setColor(Color.rgb(38, 38, 38));
+            micBackground.setStroke(Math.max(1, (int) density), Color.rgb(90, 90, 90));
+            voiceSearch.setBackground(micBackground);
+            voiceSearch.setPadding(inset, inset, inset, inset);
+            voiceSearch.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
+            voiceSearch.setElevation(6 * density);
             voiceSearch.setOnClickListener(v ->
                     SearchPresenter.instance(requireContext()).startVoice());
 
-            float density = getResources().getDisplayMetrics().density;
-            int buttonSize = (int) (48 * density + 0.5f);
             FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
                     buttonSize, buttonSize, Gravity.TOP | Gravity.START);
             params.leftMargin = (int) (12 * density + 0.5f);
