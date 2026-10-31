@@ -7,6 +7,7 @@ on:
       - '.github/workflows/build.yml'
       - 'SmartTube-security-vless-v10.patch'
       - 'tools/apply-modern-ui-config.py'
+      - 'tools/fix-shorts-ui.py'
 
 permissions:
   contents: read
@@ -35,6 +36,10 @@ jobs:
 
       - name: Apply modern UI navigation configuration
         run: python3 ../tools/apply-modern-ui-config.py
+        working-directory: smarttube_src
+
+      - name: Fix Shorts navigation, details and social actions
+        run: python3 ../tools/fix-shorts-ui.py
         working-directory: smarttube_src
 
       - name: Set up Java 17 for Android SDK
