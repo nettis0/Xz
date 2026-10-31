@@ -96,7 +96,7 @@ def enable_modern_player(source):
     source = replace_once(
         source,
         "import com.liskovsoft.smartyoutubetv2.tv.ui.playback.PlaybackActivity;\n",
-        "import com.liskovsoft.smartyoutubetv2.tv.ui.modern.playback.ModernPlaybackActivity;\\n",
+        "import com.liskovsoft.smartyoutubetv2.tv.ui.modern.playback.ModernPlaybackActivity;\n",
         "Import the modern playback activity"
     )
     return replace_once(
