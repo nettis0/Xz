@@ -210,6 +210,15 @@ def shorts_layout(source):
 def shorts_grid_interactions(source):
     # The dedicated Shorts grid is authoritative even when an API item omits
     # its isShorts flag. Preserve that state through focus and click handling.
+    playback_import = "import com.liskovsoft.smartyoutubetv2.common.app.presenters.PlaybackPresenter;\n"
+    if playback_import.strip() not in source:
+        source = replace_once(
+            source,
+            "import com.liskovsoft.smartyoutubetv2.common.app.presenters.interfaces.VideoGroupPresenter;\n",
+            "import com.liskovsoft.smartyoutubetv2.common.app.presenters.interfaces.VideoGroupPresenter;\n" + playback_import,
+            "Import direct Shorts playback navigation"
+        )
+
     if "private boolean mShortsSection;" not in source:
         source = replace_once(
             source,
@@ -248,11 +257,15 @@ def shorts_grid_interactions(source):
                     Video video = (Video) viewHolder.getItem();
                     if (video != null && mShortsSection) {
                         video.isShorts = true;
+                        // Shorts cards must always start playback, never be routed
+                        // through channel/playlist heuristics.
+                        PlaybackPresenter.instance(getContext()).openVideo(video);
+                    } else {
+                        mPresenter.onVideoItemClicked(video);
                     }
-                    mPresenter.onVideoItemClicked(video);
                 });"""
     if old_click in source:
-        source = replace_once(source, old_click, new_click, "Preserve Shorts mode when opening a video from the Shorts grid")
+        source = replace_once(source, old_click, new_click, "Open Shorts cards directly in the Shorts player")
     elif new_click not in source:
         raise SystemExit("Shorts click handler not found")
 
