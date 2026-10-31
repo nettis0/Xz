@@ -159,6 +159,41 @@ def general_data(source):
         "Force double-Back app exit"
     )
 
+def youtube_theme(source):
+    # YouTube TV-inspired neutral dark surfaces and red accent.
+    replacements = {
+        '<color name="fastlane_background">#0096a6</color>':
+            '<color name="fastlane_background">#FF0033</color>',
+        '<color name="fastlane_background_dark">#004B53</color>':
+            '<color name="fastlane_background_dark">#181818</color>',
+        '<color name="search_opaque">#0096a6</color>':
+            '<color name="search_opaque">#FF0033</color>',
+        '<color name="card_selected_background_white">#FFFFFF</color>':
+            '<color name="card_selected_background_white">#303030</color>',
+        '<color name="card_selected_text_grey">#343434</color>':
+            '<color name="card_selected_text_grey">#FFFFFF</color>',
+        '<color name="card_default_background_dark">#004B53</color>':
+            '<color name="card_default_background_dark">#181818</color>',
+        '<color name="card_default_text">#FFFFFF</color>':
+            '<color name="card_default_text">#F1F1F1</color>',
+        '<color name="shelf_background_dark">#131313</color>':
+            '<color name="shelf_background_dark">#0F0F0F</color>',
+        '<color name="scheme_grey_background">#181818</color>':
+            '<color name="scheme_grey_background">#0F0F0F</color>',
+        '<color name="scheme_grey_background_dark">#181818</color>':
+            '<color name="scheme_grey_background_dark">#0F0F0F</color>',
+        '<color name="scheme_grey_shelf_background_dark">#000000</color>':
+            '<color name="scheme_grey_shelf_background_dark">#0F0F0F</color>',
+        '<color name="scheme_grey_card_background_dark">#121212</color>':
+            '<color name="scheme_grey_card_background_dark">#181818</color>',
+    }
+    for old, new in replacements.items():
+        if old in source:
+            source = source.replace(old, new, 1)
+        elif new not in source:
+            raise SystemExit("YouTube theme color not found: " + old)
+    return source
+
 def browse_fragment(source):
     source = replace_once(
         source,
@@ -211,5 +246,6 @@ edit("smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/ot
 edit("smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/PlaybackActivity.java", playback_activity)
 edit("common/src/main/java/com/liskovsoft/smartyoutubetv2/common/prefs/GeneralData.java", general_data)
 edit("smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/BrowseFragment.java", browse_fragment)
+edit("smarttubetv/src/main/res/values/colors.xml", youtube_theme)
 
 print("UI customization phase 1 completed.")
