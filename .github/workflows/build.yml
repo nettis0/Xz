@@ -8,6 +8,8 @@ on:
       - 'SmartTube-security-vless-v10.patch'
       - 'tools/apply-modern-ui-config.py'
       - 'tools/fix-shorts-ui.py'
+      - 'tools/apply-release-v11.py'
+      - 'tools/verify-release-v11.py'
 
 permissions:
   contents: read
@@ -40,6 +42,14 @@ jobs:
 
       - name: Fix Shorts navigation, details and social actions
         run: python3 ../tools/fix-shorts-ui.py
+        working-directory: smarttube_src
+
+      - name: Apply Shorts v11 feed, gestures, microphone and settings fixes
+        run: python3 ../tools/apply-release-v11.py
+        working-directory: smarttube_src
+
+      - name: Verify v11 UI changes and preserved settings
+        run: python3 ../tools/verify-release-v11.py
         working-directory: smarttube_src
 
       - name: Set up Java 17 for Android SDK
