@@ -32,6 +32,7 @@ def sidebar(source):
         mDefaultSections.put(R.string.header_kids_home, MediaGroup.TYPE_KIDS_HOME);
         mDefaultSections.put(R.string.header_subscriptions, MediaGroup.TYPE_SUBSCRIPTIONS);
         mDefaultSections.put(R.string.header_history, MediaGroup.TYPE_HISTORY);
+        mDefaultSections.put(R.string.header_settings, MediaGroup.TYPE_SETTINGS);
     }""",
         source, count=1, flags=re.S
     )
