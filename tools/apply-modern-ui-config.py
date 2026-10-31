@@ -202,6 +202,70 @@ def shorts_layout(source):
     return source
 
 
+def shorts_grid_interactions(source):
+    # A Shorts grid is authoritative: some API responses omit the isShorts
+    # marker even though the item came from the dedicated Shorts feed.
+    source = replace_once(
+        source,
+        "    private boolean mChannelGrid;\\n",
+        "    private boolean mChannelGrid;\\n    private boolean mShortsSection;\\n",
+        "Track whether this grid is the dedicated Shorts section"
+    )
+    source = replace_once(
+        source,
+        "    public void setShorts(boolean shorts) {\\n        if (!shorts) {",
+        "    public void setShorts(boolean shorts) {\\n        mShortsSection = shorts;\\n        if (!shorts) {",
+        "Remember Shorts section mode"
+    )
+    source = replace_once(
+        source,
+        "    public void update(VideoGroup group) {\\n        int action = group.getAction();",
+        "    public void update(VideoGroup group) {\\n        if (mShortsSection && group.getVideos() != null) {\\n            for (Video video : group.getVideos()) {\\n                if (video != null) {\\n                    video.isShorts = true;\\n                }\\n            }\\n        }\\n\\n        int action = group.getAction();",
+        "Mark every item loaded from the Shorts feed as a Short"
+    )
+    source = replace_once(
+        source,
+        "                viewHolder.itemView.setOnClickListener(v -> mPresenter.onVideoItemClicked((Video) viewHolder.getItem()));",
+        "                viewHolder.itemView.setOnClickListener(v -> {\\n                    Video video = (Video) viewHolder.getItem();\\n                    if (mShortsSection) {\\n                        video.isShorts = true;\\n                    }\\n                    mPresenter.onVideoItemClicked(video);\\n                });",
+        "Preserve Shorts mode when opening a video from the Shorts grid"
+    )
+    source = replace_once(
+        source,
+        "        mPresenter.onVideoItemSelected((Video) mAdapter.get(position));",
+        "        Video selected = (Video) mAdapter.get(position);\\n        if (mShortsSection) {\\n            selected.isShorts = true;\\n        }\\n        mPresenter.onVideoItemSelected(selected);",
+        "Keep the selected Shorts item marked for correct playback navigation"
+    )
+    return source
+
+
+def shorts_overlay_interactions(source):
+    source = replace_once(
+        source,
+        "        mTime = findViewById(R.id.modern_shorts_time);\\n",
+        "        mTime = findViewById(R.id.modern_shorts_time);\\n\\n        // The title opens the video's menu, which includes the full description.\\n        mTitle.setFocusable(true);\\n        mTitle.setFocusableInTouchMode(true);\\n        mTitle.setOnClickListener(v -> {\\n            if (mListener != null) {\\n                mListener.onShortsMore();\\n            }\\n        });\\n",
+        "Make Shorts title open details and description"
+    )
+    source = replace_once(
+        source,
+        "            case KeyEvent.KEYCODE_DPAD_RIGHT:\\n                mTitle.setFocusable(false);\\n                mChannel.requestFocus();\\n                return true;",
+        "            case KeyEvent.KEYCODE_DPAD_RIGHT:\\n                return mTitle.requestFocus();",
+        "Enter the Shorts details panel at its title"
+    )
+    source = replace_once(
+        source,
+        "            case KeyEvent.KEYCODE_DPAD_DOWN:\\n                if (focused == mChannel) {",
+        "            case KeyEvent.KEYCODE_DPAD_DOWN:\\n                if (focused == mTitle) {\\n                    return mChannel.requestFocus();\\n                }\\n                if (focused == mChannel) {",
+        "Include the title in vertical panel focus navigation"
+    )
+    source = replace_once(
+        source,
+        "            case KeyEvent.KEYCODE_DPAD_UP:\\n                if (inActions) {",
+        "            case KeyEvent.KEYCODE_DPAD_UP:\\n                if (focused == mChannel) {\\n                    return mTitle.requestFocus();\\n                }\\n                if (inActions) {",
+        "Return focus from the channel row to the Shorts title"
+    )
+    return source
+
+
 def shorts_dimensions(source):
     return replace_once(
         source,
@@ -306,6 +370,14 @@ edit(
 edit(
     "smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/modern/playback/ModernShortsOverlay.java",
     shorts_overlay
+)
+edit(
+    "smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/modern/playback/ModernShortsOverlay.java",
+    shorts_overlay_interactions
+)
+edit(
+    "smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/modern/browse/ModernGridView.java",
+    shorts_grid_interactions
 )
 edit(
     "smarttubetv/src/main/res/layout/modern_shorts_overlay.xml",
