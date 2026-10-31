@@ -28,7 +28,7 @@ jobs:
           patch --batch --forward --fuzz=0 -p2 -d smarttube_src < SmartTube-security-vless-v10.patch
 
       - name: Apply YouTube-style UI customization
-        run: python3 tools/apply-ui-customization.py
+        run: python3 ../tools/apply-ui-customization.py
         working-directory: smarttube_src
 
       - name: Set up Java 17 for Android SDK
