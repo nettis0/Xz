@@ -113,54 +113,6 @@ def overlay(source):
     return source
 
 
-def glue(source):
-    # Likes, dislikes and comments must exist in the action adapter even if a
-    # user previously hid those buttons from the classic player controls.
-    source = replace_once(
-        source,
-        """        if (mMovedActions != null) {
-            adapter.addAll(adapter.size(), mMovedActions);
-            mMovedActions.clear();
-        }
-    }""",
-        """        if (mMovedActions != null) {
-            adapter.addAll(adapter.size(), mMovedActions);
-            mMovedActions.clear();
-        }
-
-        ensureShortsAction(adapter, R.id.action_channel, new com.liskovsoft.smartyoutubetv2.tv.ui.playback.actions.ChannelAction(getContext()));
-        ensureShortsAction(adapter, R.id.action_subscribe, new com.liskovsoft.smartyoutubetv2.tv.ui.playback.actions.SubscribeAction(getContext()));
-        ensureShortsAction(adapter, R.id.action_thumbs_up, new com.liskovsoft.smartyoutubetv2.tv.ui.playback.actions.ThumbsUpAction(getContext()));
-        ensureShortsAction(adapter, R.id.action_thumbs_down, new com.liskovsoft.smartyoutubetv2.tv.ui.playback.actions.ThumbsDownAction(getContext()));
-        ensureShortsAction(adapter, R.id.action_chat, new com.liskovsoft.smartyoutubetv2.tv.ui.playback.actions.ChatAction(getContext()));
-    }
-
-    private static void ensureShortsAction(ArrayObjectAdapter adapter, int actionId, Action action) {
-        for (int i = 0; i < adapter.size(); i++) {
-            if (((Action) adapter.get(i)).getId() == actionId) {
-                return;
-            }
-        }
-        adapter.add(action);
-    }""",
-        "Keep Shorts social actions available independently of player button preferences"
-    )
-    # Read the state from VideoPlayerGlue's canonical action objects, not from
-    # the adapter fallback objects added above.
-    source = replace_once(
-        source,
-        """    public boolean isActionActive(int actionId) {
-        Action action = findAction(actionId);
-        return action != null && ModernControlButtonPresenterSelector.isActive(action);
-    }""",
-        """    public boolean isActionActive(int actionId) {
-        return getButtonState(actionId) > 0;
-    }""",
-        "Read the canonical Shorts action state"
-    )
-    return source
-
-
 def shorts_layout(source):
     marker = """        <TextView
             android:id="@+id/modern_shorts_title""" 
@@ -198,10 +150,6 @@ edit(
 edit(
     "smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/modern/playback/ModernShortsOverlay.java",
     overlay
-)
-edit(
-    "smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/modern/playback/ModernVideoPlayerGlue.java",
-    glue
 )
 edit(
     "smarttubetv/src/main/res/layout/modern_shorts_overlay.xml",
