@@ -45,9 +45,24 @@ require(
         "if (current.belongsToShortsGroup())",
         "result = getNextFromGroup(current);",
         "private Video getNextFromGroup(Video current)",
+        "public Video getNextShortInFeed()",
+        "public void continueShortsGroup(Runnable onReady)",
+        "mShortsContinuationInProgress",
         "item.sectionId = MediaGroup.TYPE_SHORTS;",
     ],
     "Next/previous navigation stays inside the Shorts feed"
+)
+ 
+loader = read("common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/VideoLoaderController.java")
+require(
+    loader,
+    [
+        "current.belongsToShortsGroup()",
+        "mSuggestionsController.getNextShortInFeed()",
+        "mSuggestionsController.continueShortsGroup(() ->",
+        "waitMetadataSync(current, true);",
+    ],
+    "The Shorts player loads the next page when the current page ends"
 )
 
 overlay = read("smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/modern/playback/ModernShortsOverlay.java")
