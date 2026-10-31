@@ -132,11 +132,14 @@ def shorts_overlay(source):
 
         switch (keyCode) {
             case KeyEvent.KEYCODE_DPAD_DOWN:
+                if (focused == mTitle) {
+                    return mChannel.requestFocus();
+                }
                 if (focused == mChannel) {
                     return mSubscribe.requestFocus();
                 }
                 if (focused == mSubscribe) {
-                    return mActions.getChildAt(0).requestFocus();
+                    return mActions.getChildCount() > 0 && mActions.getChildAt(0).requestFocus();
                 }
                 if (inActions) {
                     if (actionIndex + 1 < mActions.getChildCount()) {
@@ -156,7 +159,10 @@ def shorts_overlay(source):
                 if (focused == mSubscribe) {
                     return mChannel.requestFocus();
                 }
-                return focused == mChannel;
+                if (focused == mChannel) {
+                    return mTitle.requestFocus();
+                }
+                return focused == mTitle;
 
             case KeyEvent.KEYCODE_DPAD_RIGHT:
                 return true;
@@ -178,7 +184,6 @@ def shorts_overlay(source):
         "Stack Shorts action buttons vertically"
     )
     return source
-
 
 def shorts_layout(source):
     source = replace_once(
@@ -203,68 +208,107 @@ def shorts_layout(source):
 
 
 def shorts_grid_interactions(source):
-    # A Shorts grid is authoritative: some API responses omit the isShorts
-    # marker even though the item came from the dedicated Shorts feed.
-    source = replace_once(
-        source,
-        "    private boolean mChannelGrid;\\n",
-        "    private boolean mChannelGrid;\\n    private boolean mShortsSection;\\n",
-        "Track whether this grid is the dedicated Shorts section"
-    )
-    source = replace_once(
-        source,
-        "    public void setShorts(boolean shorts) {\\n        if (!shorts) {",
-        "    public void setShorts(boolean shorts) {\\n        mShortsSection = shorts;\\n        if (!shorts) {",
-        "Remember Shorts section mode"
-    )
-    source = replace_once(
-        source,
-        "    public void update(VideoGroup group) {\\n        int action = group.getAction();",
-        "    public void update(VideoGroup group) {\\n        if (mShortsSection && group.getVideos() != null) {\\n            for (Video video : group.getVideos()) {\\n                if (video != null) {\\n                    video.isShorts = true;\\n                }\\n            }\\n        }\\n\\n        int action = group.getAction();",
-        "Mark every item loaded from the Shorts feed as a Short"
-    )
-    source = replace_once(
-        source,
-        "                viewHolder.itemView.setOnClickListener(v -> mPresenter.onVideoItemClicked((Video) viewHolder.getItem()));",
-        "                viewHolder.itemView.setOnClickListener(v -> {\\n                    Video video = (Video) viewHolder.getItem();\\n                    if (mShortsSection) {\\n                        video.isShorts = true;\\n                    }\\n                    mPresenter.onVideoItemClicked(video);\\n                });",
-        "Preserve Shorts mode when opening a video from the Shorts grid"
-    )
-    source = replace_once(
-        source,
-        "        mPresenter.onVideoItemSelected((Video) mAdapter.get(position));",
-        "        Video selected = (Video) mAdapter.get(position);\\n        if (mShortsSection) {\\n            selected.isShorts = true;\\n        }\\n        mPresenter.onVideoItemSelected(selected);",
-        "Keep the selected Shorts item marked for correct playback navigation"
-    )
-    return source
+    # The dedicated Shorts grid is authoritative even when an API item omits
+    # its isShorts flag. Preserve that state through focus and click handling.
+    if "private boolean mShortsSection;" not in source:
+        source = replace_once(
+            source,
+            "    private boolean mChannelGrid;\n",
+            "    private boolean mChannelGrid;\n    private boolean mShortsSection;\n",
+            "Track whether this grid is the dedicated Shorts section"
+        )
 
+    if "mShortsSection = shorts;" not in source:
+        source = replace_once(
+            source,
+            "    public void setShorts(boolean shorts) {\n        if (!shorts) {",
+            "    public void setShorts(boolean shorts) {\n        mShortsSection = shorts;\n        if (!shorts) {",
+            "Remember Shorts section mode"
+        )
+
+    if "if (mShortsSection && group.getVideos() != null)" not in source:
+        source = replace_once(
+            source,
+            "    public void update(VideoGroup group) {\n        int action = group.getAction();",
+            """    public void update(VideoGroup group) {
+        if (mShortsSection && group.getVideos() != null) {
+            for (Video video : group.getVideos()) {
+                if (video != null) {
+                    video.isShorts = true;
+                }
+            }
+        }
+
+        int action = group.getAction();""",
+            "Mark every item loaded from the Shorts feed as a Short"
+        )
+
+    old_click = "                viewHolder.itemView.setOnClickListener(v -> mPresenter.onVideoItemClicked((Video) viewHolder.getItem()));"
+    new_click = """                viewHolder.itemView.setOnClickListener(v -> {
+                    Video video = (Video) viewHolder.getItem();
+                    if (video != null && mShortsSection) {
+                        video.isShorts = true;
+                    }
+                    mPresenter.onVideoItemClicked(video);
+                });"""
+    if old_click in source:
+        source = replace_once(source, old_click, new_click, "Preserve Shorts mode when opening a video from the Shorts grid")
+    elif new_click not in source:
+        raise SystemExit("Shorts click handler not found")
+
+    old_selected = "        mPresenter.onVideoItemSelected((Video) mAdapter.get(position));"
+    new_selected = """        Video selected = (Video) mAdapter.get(position);
+        if (selected != null && mShortsSection) {
+            selected.isShorts = true;
+        }
+        mPresenter.onVideoItemSelected(selected);"""
+    if old_selected in source:
+        source = replace_once(source, old_selected, new_selected, "Keep the selected Shorts item marked for correct playback navigation")
+    elif new_selected not in source:
+        raise SystemExit("Shorts selected-item handler not found")
+
+    return source
 
 def shorts_overlay_interactions(source):
-    source = replace_once(
-        source,
-        "        mTime = findViewById(R.id.modern_shorts_time);\\n",
-        "        mTime = findViewById(R.id.modern_shorts_time);\\n\\n        // The title opens the video's menu, which includes the full description.\\n        mTitle.setFocusable(true);\\n        mTitle.setFocusableInTouchMode(true);\\n        mTitle.setOnClickListener(v -> {\\n            if (mListener != null) {\\n                mListener.onShortsMore();\\n            }\\n        });\\n",
-        "Make Shorts title open details and description"
-    )
-    source = replace_once(
-        source,
-        "            case KeyEvent.KEYCODE_DPAD_RIGHT:\\n                mTitle.setFocusable(false);\\n                mChannel.requestFocus();\\n                return true;",
-        "            case KeyEvent.KEYCODE_DPAD_RIGHT:\\n                return mTitle.requestFocus();",
-        "Enter the Shorts details panel at its title"
-    )
-    source = replace_once(
-        source,
-        "            case KeyEvent.KEYCODE_DPAD_DOWN:\\n                if (focused == mChannel) {",
-        "            case KeyEvent.KEYCODE_DPAD_DOWN:\\n                if (focused == mTitle) {\\n                    return mChannel.requestFocus();\\n                }\\n                if (focused == mChannel) {",
-        "Include the title in vertical panel focus navigation"
-    )
-    source = replace_once(
-        source,
-        "            case KeyEvent.KEYCODE_DPAD_UP:\\n                if (inActions) {",
-        "            case KeyEvent.KEYCODE_DPAD_UP:\\n                if (focused == mChannel) {\\n                    return mTitle.requestFocus();\\n                }\\n                if (inActions) {",
-        "Return focus from the channel row to the Shorts title"
-    )
-    return source
+    if "mTitle.setOnClickListener" not in source:
+        source = replace_once(
+            source,
+            "        mTime = findViewById(R.id.modern_shorts_time);\n",
+            """        mTime = findViewById(R.id.modern_shorts_time);
 
+        // The title opens the full video description.
+        mTitle.setFocusable(true);
+        mTitle.setFocusableInTouchMode(true);
+        mTitle.setOnClickListener(v -> {
+            if (mListener != null) {
+                mListener.onShortsAction(R.id.action_info);
+            }
+        });
+""",
+            "Make Shorts title open the full description"
+        )
+
+    if "addAction(R.id.action_info, R.string.action_video_info);" not in source:
+        source = replace_once(
+            source,
+            "        addAction(R.id.action_thumbs_down, R.string.action_dislike);\n",
+            "        addAction(R.id.action_thumbs_down, R.string.action_dislike);\n"
+            "        addAction(R.id.action_info, R.string.action_video_info);\n",
+            "Add a dedicated Shorts description action"
+        )
+
+    old_right = """            case KeyEvent.KEYCODE_DPAD_RIGHT:
+                mTitle.setFocusable(false);
+                mChannel.requestFocus();
+                return true;"""
+    new_right = """            case KeyEvent.KEYCODE_DPAD_RIGHT:
+                return mTitle.requestFocus();"""
+    if old_right in source:
+        source = replace_once(source, old_right, new_right, "Enter the Shorts details panel at its title")
+    elif new_right not in source:
+        raise SystemExit("Shorts video-to-panel focus link not found")
+
+    return source
 
 def shorts_dimensions(source):
     return replace_once(
@@ -276,15 +320,13 @@ def shorts_dimensions(source):
 
 
 def shorts_layout_interactions(source):
-    return replace_once(
-        source,
-        '            android:textStyle="bold" />',
-        '            android:textStyle="bold"\\n'
-        '            android:focusable="true"\\n'
-        '            android:clickable="true" />',
-        "Make the Shorts title focusable and clickable for description access"
-    )
-
+    old = '            android:textStyle="bold" />'
+    new = '            android:textStyle="bold"\n            android:focusable="true"\n            android:focusableInTouchMode="true"\n            android:clickable="true" />'
+    if old in source:
+        source = replace_once(source, old, new, "Make the Shorts title focusable and clickable")
+    elif new not in source:
+        raise SystemExit("Shorts title layout insertion point not found")
+    return source
 
 def playback_optimization(source):
     source = replace_once(
@@ -376,6 +418,127 @@ def card_image_optimization(source):
     )
     return source
 
+def modern_shorts_glue(source):
+    import_marker = "import com.liskovsoft.smartyoutubetv2.tv.ui.playback.other.VideoPlayerGlue;\n"
+    imports = (
+        "import com.liskovsoft.smartyoutubetv2.tv.ui.playback.actions.ChatAction;\n"
+        "import com.liskovsoft.smartyoutubetv2.tv.ui.playback.actions.SubscribeAction;\n"
+        "import com.liskovsoft.smartyoutubetv2.tv.ui.playback.actions.ThumbsDownAction;\n"
+        "import com.liskovsoft.smartyoutubetv2.tv.ui.playback.actions.ThumbsUpAction;\n"
+        "import com.liskovsoft.smartyoutubetv2.tv.ui.playback.actions.VideoInfoAction;\n"
+    )
+    if "import com.liskovsoft.smartyoutubetv2.tv.ui.playback.actions.ThumbsUpAction;" not in source:
+        source = replace_once(source, import_marker, imports + import_marker, "Import the built-in Shorts actions")
+
+    old = """    public boolean performAction(int actionId) {
+        Action action = findAction(actionId);
+
+        if (action == null) {
+            return false;
+        }
+
+        onActionClicked(action);
+        return true;
+    }"""
+    new = """    public boolean performAction(int actionId) {
+        Action action = findAction(actionId);
+
+        // Shorts always expose social and details actions, even when the user
+        // has hidden the corresponding buttons from the normal player row.
+        if (action == null) {
+            action = createShortsAction(actionId);
+        }
+
+        if (action == null) {
+            return false;
+        }
+
+        if (action instanceof PlaybackControlsRow.MultiAction) {
+            ((PlaybackControlsRow.MultiAction) action).setIndex(getButtonState(actionId));
+        }
+
+        onActionClicked(action);
+        return true;
+    }
+
+    private Action createShortsAction(int actionId) {
+        switch (actionId) {
+            case R.id.action_thumbs_up:
+                return new ThumbsUpAction(getContext());
+            case R.id.action_thumbs_down:
+                return new ThumbsDownAction(getContext());
+            case R.id.action_chat:
+                return new ChatAction(getContext());
+            case R.id.action_info:
+                return new VideoInfoAction(getContext());
+            case R.id.action_subscribe:
+                return new SubscribeAction(getContext());
+        }
+
+        return null;
+    }"""
+    if old in source:
+        source = replace_once(source, old, new, "Make Shorts actions work independently of normal player-button visibility")
+    elif "private Action createShortsAction(int actionId)" not in source:
+        raise SystemExit("Modern player action insertion point not found")
+
+    old_active = """    public boolean isActionActive(int actionId) {
+        Action action = findAction(actionId);
+        return action != null && ModernControlButtonPresenterSelector.isActive(action);
+    }"""
+    new_active = """    public boolean isActionActive(int actionId) {
+        Action action = findAction(actionId);
+        if (action == null) {
+            action = createShortsAction(actionId);
+            if (action instanceof PlaybackControlsRow.MultiAction) {
+                ((PlaybackControlsRow.MultiAction) action).setIndex(getButtonState(actionId));
+            }
+        }
+        return action != null && ModernControlButtonPresenterSelector.isActive(action);
+    }"""
+    if old_active in source:
+        source = replace_once(source, old_active, new_active, "Read Shorts action state even when the normal player button is hidden")
+    elif "action = createShortsAction(actionId);" not in source[source.find("public boolean isActionActive"):source.find("private Action createShortsAction")]:
+        raise SystemExit("Modern player action-state insertion point not found")
+
+    return source
+
+
+def shorts_channel_navigation(source):
+    import_line = "import com.liskovsoft.smartyoutubetv2.common.app.presenters.dialogs.menu.VideoMenuPresenter;\n"
+    if "import com.liskovsoft.smartyoutubetv2.common.app.presenters.ChannelPresenter;" not in source:
+        source = replace_once(
+            source,
+            import_line,
+            "import com.liskovsoft.smartyoutubetv2.common.app.presenters.ChannelPresenter;\n" + import_line,
+            "Import the channel presenter for the Shorts author link"
+        )
+
+    old = """            public void onShortsAction(int actionId) {
+                if (mGlue != null) {
+                    mGlue.performAction(actionId);
+                }
+            }"""
+    new = """            public void onShortsAction(int actionId) {
+                if (actionId == R.id.action_channel) {
+                    if (mVideo != null && ChannelPresenter.canOpenChannel(mVideo)) {
+                        ChannelPresenter.instance(getContext()).openChannel(mVideo);
+                    }
+                    return;
+                }
+
+                if (mGlue != null) {
+                    mGlue.performAction(actionId);
+                }
+            }"""
+    if old in source:
+        source = replace_once(source, old, new, "Open the Shorts author channel directly")
+    elif "ChannelPresenter.instance(getContext()).openChannel(mVideo);" not in source:
+        raise SystemExit("Shorts author click handler not found")
+
+    return source
+
+
 edit(
     "common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/BrowsePresenter.java",
     sidebar
@@ -415,6 +578,14 @@ edit(
 edit(
     "smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/modern/playback/ModernPlaybackFragment.java",
     playback_optimization
+)
+edit(
+    "smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/modern/playback/ModernPlaybackFragment.java",
+    shorts_channel_navigation
+)
+edit(
+    "smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/modern/playback/ModernVideoPlayerGlue.java",
+    modern_shorts_glue
 )
 edit(
     "smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/modern/widgets/ModernCardPresenter.java",
