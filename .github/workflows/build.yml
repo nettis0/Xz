@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/build.yml'
       - 'SmartTube-security-vless-v10.patch'
+      - 'tools/apply-ui-customization.py'
 
 permissions:
   contents: read
@@ -25,6 +26,10 @@ jobs:
           set -euo pipefail
           git clone --depth 1 https://github.com/yuliskov/SmartTube.git smarttube_src
           patch --batch --forward --fuzz=0 -p2 -d smarttube_src < SmartTube-security-vless-v10.patch
+
+      - name: Apply YouTube-style UI customization
+        run: python3 tools/apply-ui-customization.py
+        working-directory: smarttube_src
 
       - name: Set up Java 17 for Android SDK
         uses: actions/setup-java@v4
