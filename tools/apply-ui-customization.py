@@ -2,7 +2,7 @@
 from pathlib import Path
 import re
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path.cwd() if (Path.cwd() / "common").is_dir() else Path(__file__).resolve().parents[1]
 
 def edit(rel, transform):
     path = ROOT / rel
