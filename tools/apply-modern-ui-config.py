@@ -87,11 +87,23 @@ def sidebar(source):
 
 
 def enable_modern_player(source):
-    return replace_once(
+    source = replace_once(
         source,
         "ModernActivityResolver resolver = new ModernActivityResolver(MainUIData.instance(this).isModernUiEnabled());",
         "ModernActivityResolver resolver = new ModernActivityResolver(true);",
-        "Route playback and all supported screens through the modern TV interface"
+        "Enable the modern TV interface for all supported screens"
+    )
+    source = replace_once(
+        source,
+        "import com.liskovsoft.smartyoutubetv2.tv.ui.playback.PlaybackActivity;\\n",
+        "import com.liskovsoft.smartyoutubetv2.tv.ui.modern.playback.ModernPlaybackActivity;\\n",
+        "Import the modern playback activity"
+    )
+    return replace_once(
+        source,
+        "viewManager.register(PlaybackView.class, resolver.resolve(PlaybackView.class, PlaybackActivity.class), root);",
+        "viewManager.register(PlaybackView.class, ModernPlaybackActivity.class, root);",
+        "Explicitly route every video to the modern YouTube TV player"
     )
 
 
