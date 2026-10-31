@@ -432,6 +432,15 @@ def card_image_optimization(source):
     return source
 
 def modern_shorts_glue(source):
+    leanback_import = "import androidx.leanback.widget.PlaybackControlsRow;\n"
+    if leanback_import.strip() not in source:
+        source = replace_once(
+            source,
+            "import androidx.leanback.widget.PlaybackRowPresenter;\n",
+            leanback_import + "import androidx.leanback.widget.PlaybackRowPresenter;\n",
+            "Import the player action container type"
+        )
+
     import_marker = "import com.liskovsoft.smartyoutubetv2.tv.ui.playback.other.VideoPlayerGlue;\n"
     imports = (
         "import com.liskovsoft.smartyoutubetv2.tv.ui.playback.actions.ChatAction;\n"
