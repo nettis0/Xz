@@ -275,6 +275,17 @@ def shorts_dimensions(source):
     )
 
 
+def shorts_layout_interactions(source):
+    return replace_once(
+        source,
+        '            android:textStyle="bold" />',
+        '            android:textStyle="bold"\\n'
+        '            android:focusable="true"\\n'
+        '            android:clickable="true" />',
+        "Make the Shorts title focusable and clickable for description access"
+    )
+
+
 def playback_optimization(source):
     source = replace_once(
         source,
@@ -316,6 +327,16 @@ def playback_optimization(source):
         "                params.gravity = Gravity.START | Gravity.TOP;",
         "                params.gravity = Gravity.LEFT | Gravity.TOP;",
         "Keep the Shorts video on the left in every locale"
+    )
+
+    source = replace_once(
+        source,
+        """        super.onViewCreated(view, savedInstanceState);
+        view.getViewTreeObserver().addOnGlobalLayoutListener(mStyleProgress);""",
+        """        super.onViewCreated(view, savedInstanceState);
+        updateShortsMode(); // Also handle videos restored before the playback view was created.
+        view.getViewTreeObserver().addOnGlobalLayoutListener(mStyleProgress);""",
+        "Restore Shorts overlay when playback view is created"
     )
     return source
 
@@ -374,6 +395,10 @@ edit(
 edit(
     "smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/modern/playback/ModernShortsOverlay.java",
     shorts_overlay_interactions
+)
+edit(
+    "smarttubetv/src/main/res/layout/modern_shorts_overlay.xml",
+    shorts_layout_interactions
 )
 edit(
     "smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/modern/browse/ModernGridView.java",
