@@ -68,6 +68,30 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Configure persistent APK signing
+        working-directory: smarttube_src
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ] && [ -n "${ANDROID_KEYSTORE_PASSWORD:-}" ] && [ -n "${ANDROID_KEY_ALIAS:-}" ] && [ -n "${ANDROID_KEY_PASSWORD:-}" ]; then
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > signing-key.jks
+            cat > keystore.properties <<EOF
+          storeFile=signing-key.jks
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          keyPassword=$ANDROID_KEY_PASSWORD
+          EOF
+            chmod 600 signing-key.jks keystore.properties
+            echo "Persistent signing key configured."
+          else
+            echo "Persistent signing secrets are not configured; this APK will use the temporary runner debug key and will not be update-compatible with future clean runners."
+          fi
+
       - name: Prepare SmartTube dependencies
         working-directory: smarttube_src
         run: |
