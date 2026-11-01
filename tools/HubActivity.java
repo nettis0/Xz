@@ -90,6 +90,8 @@ public class HubActivity extends Activity {
         content.addView(detail, detailParams);
 
         LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setGravity(Gravity.CENTER);
         card.setFocusable(true);
         card.setClickable(true);
         card.setGravity(Gravity.CENTER);
@@ -97,7 +99,7 @@ public class HubActivity extends Activity {
         card.setOnFocusChangeListener((v, focused) ->
                 card.setBackground(cardBackground(focused ? CARD_FOCUSED : CARD, accent)));
         card.setOnClickListener(v -> action.run());
-        card.addView(content);
+        card.addView(content, new LinearLayout.LayoutParams(-1, -1));
         return card;
     }
 
