@@ -434,18 +434,10 @@ def vless_dialog_navigation(source):
     }"""
     return replace_once(source, old, new, "Keep Network settings open after VLESS stop")
 
-edit("common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/service/SidebarService.java", sidebar)
+# Preserve SmartTube's stock interface and all built-in features.
+# Only keep the requested TV app hub and VLESS settings navigation fix.
 edit("common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/settings/GeneralSettingsPresenter.java", vless_dialog_navigation)
-edit("common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/settings/GeneralSettingsPresenter.java", general_settings)
-edit("common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/settings/LanguageSettingsPresenter.java", language_settings)
-edit("common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/AppDataSourceManager.java", datasource)
-edit("common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/settings/PlayerSettingsPresenter.java", player_settings)
-edit("smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/other/VideoPlayerGlue.java", video_glue)
-edit("smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/PlaybackActivity.java", playback_activity)
-edit("common/src/main/java/com/liskovsoft/smartyoutubetv2/common/prefs/GeneralData.java", general_data)
-edit("smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/BrowseFragment.java", browse_fragment)
 install_hub()
 edit("smarttubetv/src/main/AndroidManifest.xml", hub_manifest)
-edit("common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/SplashPresenter.java", disable_background_backup_and_warmup)
 
-print("UI customization phase 1 completed.")
+print("Safe UI customization completed; stock SmartTube sections, settings and player controls are preserved.")
