@@ -434,9 +434,43 @@ def vless_dialog_navigation(source):
     }"""
     return replace_once(source, old, new, "Keep Network settings open after VLESS stop")
 
+
+def youtube_colors(source):
+    # YouTube TV-inspired dark surfaces and restrained red accent.
+    palette = {
+        "fastlane_background": "#FF0033",
+        "fastlane_background_dark": "#181818",
+        "default_background_gradient_start": "#0F0F0F",
+        "shelf_background": "#0F0F0F",
+        "shelf_background_dark": "#0F0F0F",
+        "card_default_background": "#202020",
+        "card_default_background_dark": "#202020",
+        "card_selected_background_white": "#383838",
+        "card_selected_background_white_grey": "#383838",
+        "card_selected_text_black": "#FFFFFF",
+        "scheme_grey_background": "#0F0F0F",
+        "scheme_grey_background_dark": "#0F0F0F",
+        "scheme_grey_shelf_background_dark": "#0F0F0F",
+        "scheme_grey_card_background_dark": "#202020",
+        "scheme_red_background": "#0F0F0F",
+        "scheme_red_shelf_background_dark": "#0F0F0F",
+        "scheme_red_card_background_dark": "#202020",
+        "search_opaque": "#FF0033",
+        "primary_dark": "#181818",
+        "primary_light": "#383838",
+        "primary": "#FF0033",
+    }
+    for name, value in palette.items():
+        pattern = rf'(<color name="{re.escape(name)}">)[^<]*(</color>)'
+        source, count = re.subn(pattern, lambda match: match.group(1) + value + match.group(2), source, count=1)
+        if count != 1:
+            raise SystemExit(f"YouTube color theme: expected one color {name}, found {count}")
+    return source
+
 # Keep the requested compact sidebar while preserving the complete stock settings,
 # player controls, Shorts implementation, SponsorBlock and all other SmartTube features.
 # Do not install the separate launcher hub or add an extra microphone button.
+edit("smarttubetv/src/main/res/values/colors.xml", youtube_colors)
 edit("common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/service/SidebarService.java", sidebar)
 edit("common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/settings/GeneralSettingsPresenter.java", vless_dialog_navigation)
 
