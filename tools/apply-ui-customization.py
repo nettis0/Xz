@@ -434,10 +434,10 @@ def vless_dialog_navigation(source):
     }"""
     return replace_once(source, old, new, "Keep Network settings open after VLESS stop")
 
-# Preserve SmartTube's stock interface and all built-in features.
-# Only keep the requested TV app hub and VLESS settings navigation fix.
+# Keep the requested compact sidebar while preserving the complete stock settings,
+# player controls, Shorts implementation, SponsorBlock and all other SmartTube features.
+# Do not install the separate launcher hub or add an extra microphone button.
+edit("common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/service/SidebarService.java", sidebar)
 edit("common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/settings/GeneralSettingsPresenter.java", vless_dialog_navigation)
-install_hub()
-edit("smarttubetv/src/main/AndroidManifest.xml", hub_manifest)
 
-print("Safe UI customization completed; stock SmartTube sections, settings and player controls are preserved.")
+print("UI customization completed: compact sidebar; stock settings and player preserved; no launcher hub or extra microphone.")
