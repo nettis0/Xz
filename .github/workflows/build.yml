@@ -413,10 +413,10 @@ jobs:
           for APK in "${APKS[@]}"; do
             "$APKSIGNER" verify --verbose "$APK"
             BADGING="$("$AAPT" dump badging "$APK")"
-            PACKAGE="$(printf '%s\\n' "$BADGING" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p" | head -n 1)"
-            SDK="$(printf '%s\\n' "$BADGING" | sed -n "s/^sdkVersion:'\\([^']*\\)'.*/\\1/p" | head -n 1)"
+            PACKAGE="$(printf '%s\n' "$BADGING" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p" | head -n 1)"
+            SDK="$(printf '%s\n' "$BADGING" | sed -n "s/^sdkVersion:'\\([^']*\\)'.*/\\1/p" | head -n 1)"
             test -n "$PACKAGE"
-            printf '%s\\npackage=%s\\nminSdk=%s\\n' "$(basename "$APK")" "$PACKAGE" "$SDK" >> ../dist/APK-METADATA.txt
+            printf '%s\npackage=%s\nminSdk=%s\n' "$(basename "$APK")" "$PACKAGE" "$SDK" >> ../dist/APK-METADATA.txt
           done
 
       - name: Collect APK and checksums
