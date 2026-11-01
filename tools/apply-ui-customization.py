@@ -240,6 +240,7 @@ def hub_manifest(source):
             </intent-filter>
 """
     source = replace_once(source, launcher_filter, "", "Move launcher entry from SplashActivity")
+    source = replace_once(source, 'android:allowBackup="true"', 'android:allowBackup="false"', "Disable Android backup for this fork")
     source = replace_once(
         source,
         "    </queries>",
