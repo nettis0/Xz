@@ -615,3 +615,22 @@ edit(
 )
 
 print("Modern YouTube TV pass applied: modern player routing, vertical Shorts side rail and D-pad navigation, plus app-wide thumbnail and playback optimizations.")
+def rail_compact(source):
+    source = replace_once(
+        source,
+        '<dimen name="modern_rail_item_height">39dp</dimen>',
+        '<dimen name="modern_rail_item_height">33dp</dimen>',
+        "Make navigation rail items more compact"
+    )
+    return replace_once(
+        source,
+        '<dimen name="modern_rail_divider_margin">9dp</dimen>',
+        '<dimen name="modern_rail_divider_margin">5dp</dimen>',
+        "Reduce space around rail dividers"
+    )
+
+
+edit(
+    "smarttubetv/src/main/res/values/modern_dimens.xml",
+    rail_compact
+)
