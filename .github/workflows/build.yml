@@ -361,7 +361,6 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           find smarttube_src/smarttubetv/build/outputs/apk -type f -name '*.apk' -exec cp '{}' dist/ \;
-          cp smarttube_src/common/libs/libXray.aar dist/
           sha256sum dist/* > dist/SHA256SUMS.txt
           test -n "$(find dist -maxdepth 1 -name '*.apk' -print -quit)"
 
