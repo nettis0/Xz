@@ -331,6 +331,15 @@ jobs:
               "include 'armeabi-v7a', 'arm64-v8a'"
           )
           source = source.replace("universalApk true", "universalApk false")
+          import re
+          source, removed = re.subn(
+              r"(?m)^        ndk\\s*\\{\\s*abiFilters 'armeabi-v7a', 'arm64-v8a'\\s*\\}\\s*\\n",
+              "",
+              source,
+              count=1
+          )
+          if removed != 1:
+              raise SystemExit("Could not remove the overlapping defaultConfig ABI filters.")
           path.write_text(source)
           print("Unique versionCode and ARM-only split APKs configured.")
           PY
