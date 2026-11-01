@@ -634,3 +634,31 @@ edit(
     "smarttubetv/src/main/res/values/modern_dimens.xml",
     rail_compact
 )
+
+def rail_keys(source):
+    old = "int index = mItems.indexOf(v);"
+    new = (
+        "int index = mItems.indexOf(v);\n"
+        "\n"
+        "            if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {\n"
+        "                int step = keyCode == KeyEvent.KEYCODE_DPAD_UP ? -1 : 1;\n"
+        "\n"
+        "                for (int i = index + step; i >= 0 && i < mItems.size(); i += step) {\n"
+        "                    View next = mItems.get(i);\n"
+        "\n"
+        "                    if (next.getVisibility() == View.VISIBLE) {\n"
+        "                        next.requestFocus();\n"
+        "                        break;\n"
+        "                    }\n"
+        "                }\n"
+        "\n"
+        "                return true;\n"
+        "            }"
+    )
+    return replace_once(source, old, new, "Move rail focus strictly between rail items")
+
+
+edit(
+    "smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/modern/widgets/ModernNavRail.java",
+    rail_keys
+)
