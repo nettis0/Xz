@@ -54,7 +54,7 @@ public class HubActivity extends Activity {
         cards.setGravity(Gravity.CENTER);
         root.addView(cards, new LinearLayout.LayoutParams(-1, -2));
 
-        cards.addView(makeCard("YouTube", "но лучше", ACCENT, () -> openSmartTube()), cardParams());
+        cards.addView(makeCard("YouTube", "YouTube, но лучше", ACCENT, () -> openSmartTube()), cardParams());
         cards.addView(makeCard("RuTube", "халявные фильмы", Color.rgb(255, 75, 55), () ->
                 launchOrWeb(new String[]{"ru.rutube.app", "ru.rutube.tv"}, "https://rutube.ru/")), cardParams());
         cards.addView(makeCard("Кинопоиск", "не халяв", Color.rgb(255, 190, 45), () ->
