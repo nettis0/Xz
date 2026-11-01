@@ -306,6 +306,34 @@ jobs:
           print("Updated minSdk to 21 in: " + ", ".join(changed))
           PY
 
+      - name: Set unique Android version and TV ABIs
+        working-directory: smarttube_src
+        shell: bash
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          import os
+
+          path = Path("smarttubetv/build.gradle")
+          source = path.read_text()
+          old = "versionCode 2458"
+          new = "versionCode " + str(10000 + int(os.environ["BUILD_NUMBER"]))
+          if old in source:
+              source = source.replace(old, new, 1)
+          elif new not in source:
+              raise SystemExit("Could not set a unique versionCode.")
+          source = source.replace(
+              "include 'armeabi-v7a', 'arm64-v8a', 'x86'",
+              "include 'armeabi-v7a', 'arm64-v8a'"
+          )
+          source = source.replace("universalApk true", "universalApk false")
+          path.write_text(source)
+          print("Unique versionCode and ARM-only split APKs configured.")
+          PY
+
       - name: Build libXray AAR
         working-directory: smarttube_src
         run: ./tools/build-libxray-aar.sh
