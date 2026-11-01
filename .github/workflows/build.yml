@@ -332,8 +332,8 @@ jobs:
           )
           source = source.replace("universalApk true", "universalApk false")
           abi_block = """        ndk {
-                      abiFilters 'armeabi-v7a', 'arm64-v8a'
-                  }
+            abiFilters 'armeabi-v7a', 'arm64-v8a'
+        }
           """
           if abi_block not in source:
               raise SystemExit("Could not find the overlapping defaultConfig ABI filters.")
