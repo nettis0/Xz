@@ -203,6 +203,61 @@ def browse_fragment(source):
     return replace_once(source, old, new, "Add separate sidebar voice-search button")
 
 
+
+def install_hub():
+    template = Path(__file__).resolve().parent / "HubActivity.java"
+    target = ROOT / "smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/main/HubActivity.java"
+    if not template.is_file():
+        raise SystemExit("Required launcher template missing: tools/HubActivity.java")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    source = template.read_text(encoding="utf-8")
+    if target.is_file() and target.read_text(encoding="utf-8") == source:
+        print("Already customized: HubActivity.java")
+    else:
+        target.write_text(source, encoding="utf-8")
+        print("Installed TV app hub: HubActivity.java")
+
+def hub_manifest(source):
+    launcher_filter = """            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+"""
+    source = replace_once(source, launcher_filter, "", "Move launcher entry from SplashActivity")
+    source = replace_once(
+        source,
+        "    </queries>",
+        """        <package android:name="ru.rutube.app" />
+        <package android:name="ru.rutube.tv" />
+        <package android:name="ru.kinopoisk" />
+    </queries>""",
+        "Allow TV hub to detect supported streaming apps"
+    )
+    activity = """        <activity
+            android:name="com.liskovsoft.smartyoutubetv2.tv.ui.main.HubActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|layoutDirection"
+            android:screenOrientation="unspecified">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+"""
+    return replace_once(
+        source,
+        "        <activity\n            android:name=" + '"com.liskovsoft.smartyoutubetv2.tv.ui.main.SplashActivity"',
+        activity + "        <activity\n            android:name=" + '"com.liskovsoft.smartyoutubetv2.tv.ui.main.SplashActivity"',
+        "Add TV streaming app hub as launcher"
+    )
+
 def vless_dialog_navigation(source):
     # The nested settings dialog must be closed before Android's AlertDialog editor is shown.
     # Re-open the Network page after dismissing the editor so the user stays in the same place.
@@ -345,5 +400,7 @@ edit("smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/ot
 edit("smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/PlaybackActivity.java", playback_activity)
 edit("common/src/main/java/com/liskovsoft/smartyoutubetv2/common/prefs/GeneralData.java", general_data)
 edit("smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/BrowseFragment.java", browse_fragment)
+install_hub()
+edit("smarttubetv/src/main/AndroidManifest.xml", hub_manifest)
 
 print("UI customization phase 1 completed.")
