@@ -220,16 +220,17 @@ def install_hub():
 
 def disable_background_backup_and_warmup(source):
     patterns = [
-        r"(?m)^import com\\.liskovsoft\\.smartyoutubetv2\\.common\\.misc\\.GDriveBackupWorker;\\r?\\n",
-        r"(?m)^import com\\.liskovsoft\\.smartyoutubetv2\\.common\\.misc\\.LocalDriveBackupWorker;\\r?\\n",
-        r"(?m)^import com\\.liskovsoft\\.youtubeapi\\.service\\.YouTubeServiceManager;\\r?\\n",
-        r"(?m)^\\s*GDriveBackupWorker\\.schedule\\(getContext\\(\\)\\);\\r?\\n",
-        r"(?m)^\\s*LocalDriveBackupWorker\\.schedule\\(getContext\\(\\)\\);\\r?\\n",
-        r"(?m)^\\s*YouTubeServiceManager\\.instance\\(\\)\\.refreshCacheIfNeeded\\(\\); // warm up player engine\\r?\\n",
+        r"(?m)^import com\.liskovsoft\.smartyoutubetv2\.common\.misc\.GDriveBackupWorker;\r?\n",
+        r"(?m)^import com\.liskovsoft\.smartyoutubetv2\.common\.misc\.LocalDriveBackupWorker;\r?\n",
+        r"(?m)^import com\.liskovsoft\.youtubeapi\.service\.YouTubeServiceManager;\r?\n",
+        r"(?m)^\s*GDriveBackupWorker\.schedule\(getContext\(\)\);\r?\n",
+        r"(?m)^\s*LocalDriveBackupWorker\.schedule\(getContext\(\)\);\r?\n",
+        r"(?m)^\s*YouTubeServiceManager\.instance\(\)\.refreshCacheIfNeeded\(\); // warm up player engine\r?\n",
     ]
     for pattern in patterns:
         source = re.sub(pattern, "", source)
     return source
+
 def hub_manifest(source):
     launcher_filter = """            <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
