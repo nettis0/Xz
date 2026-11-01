@@ -317,26 +317,45 @@ jobs:
           python3 <<'PY'
           from pathlib import Path
           import os
+          import re
 
           path = Path("smarttubetv/build.gradle")
           source = path.read_text()
-          old = "versionCode 2458"
-          new = "versionCode " + str(10000 + int(os.environ["BUILD_NUMBER"]))
-          if old in source:
-              source = source.replace(old, new, 1)
-          elif new not in source:
+
+          old_version = "versionCode 2458"
+          new_version = "versionCode " + str(10000 + int(os.environ["BUILD_NUMBER"]))
+
+          if old_version in source:
+              source = source.replace(old_version, new_version, 1)
+          elif new_version not in source:
               raise SystemExit("Could not set a unique versionCode.")
+
           source = source.replace(
               "include 'armeabi-v7a', 'arm64-v8a', 'x86'",
               "include 'armeabi-v7a', 'arm64-v8a'"
           )
           source = source.replace("universalApk true", "universalApk false")
-          abi_block = "        ndk {\n            abiFilters 'armeabi-v7a', 'arm64-v8a'\n        }\n"
-          if abi_block not in source:
-              raise SystemExit("Could not find the overlapping defaultConfig ABI filters.")
-          source = source.replace(abi_block, "", 1)
+
+          # Remove every simple ndk { abiFilters ... } block, including
+          # product-flavor blocks such as stfdroid. Android Gradle Plugin
+          # rejects ndk.abiFilters when splits.abi is configured.
+          pattern = re.compile(
+              r"(?m)^[ \\t]*ndk[ \\t]*\\{[ \\t]*\\r?\\n"
+              r"(?:^[ \\t]+[^\\r\\n]*\\r?\\n)*?"
+              r"^[ \\t]*abiFilters\\b[^\\r\\n]*\\r?\\n"
+              r"(?:^[ \\t]+[^\\r\\n]*\\r?\\n)*?"
+              r"^[ \\t]*\\}[ \\t]*\\r?\\n?"
+          )
+          source, removed = pattern.subn("", source)
+
+          if removed == 0:
+              raise SystemExit("No ndk.abiFilters blocks found; refusing to continue.")
+
+          if re.search(r"(?m)^\\s*abiFilters\\b", source):
+              raise SystemExit("An abiFilters declaration remains after cleanup.")
+
           path.write_text(source)
-          print("Unique versionCode and ARM-only split APKs configured.")
+          print(f"Configured ARM-only ABI splits; removed {removed} ndk.abiFilters block(s).")
           PY
 
       - name: Build libXray AAR
