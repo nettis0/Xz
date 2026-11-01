@@ -305,6 +305,27 @@ def vless_dialog_navigation(source):
         settingsPresenter.showDialog(title);"""
     source = replace_once(source, old, new, "Keep Network settings navigation in one place")
 
+    source = replace_once(
+        source,
+        "import android.content.Context;\\n",
+        "import android.content.Context;\\nimport android.content.ClipData;\\nimport android.content.ClipboardManager;\\n",
+        "Add clipboard support for VLESS profile export"
+    )
+    source = replace_once(
+        source,
+        "        if (store.hasProfile()) {\\n            XrayVlessManager manager = XrayVlessManager.instance(getContext());",
+        """        if (store.hasProfile()) {
+            settingsPresenter.appendSingleButton(UiOptionItem.from("Copy saved VLESS link", option -> {
+                ClipboardManager clipboard = (ClipboardManager) getContext().getSystemService(Context.CLIPBOARD_SERVICE);
+                if (clipboard != null) {
+                    clipboard.setPrimaryClip(ClipData.newPlainText("VLESS profile", store.getShareUri()));
+                    MessageHelpers.showMessage(getContext(), "VLESS link copied to clipboard");
+                }
+            }));
+            XrayVlessManager manager = XrayVlessManager.instance(getContext());""",
+        "Add a local VLESS profile export action"
+    )
+
     old = """        settingsPresenter.appendSingleButton(UiOptionItem.from(title, description, option -> {
             SimpleEditDialog.show(getContext(), "Import VLESS profile", "vless://…", store.getShareUri(), value -> {
                 try {
