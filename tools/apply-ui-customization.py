@@ -206,7 +206,7 @@ def browse_fragment(source):
 def vless_dialog_navigation(source):
     # The nested settings dialog must be closed before Android's AlertDialog editor is shown.
     # Re-open the Network page after dismissing the editor so the user stays in the same place.
-    old = """        settingsPresenter.appendSingleButton(UiOptionItem.from(title, option -> {
+    old = """        settingsPresenter.appendSingleButton(UiOptionItem.from(title, optionItem -> {
             appendNetworkErrorFixing(settingsPresenter);
 
             appendProxyManager(settingsPresenter);
