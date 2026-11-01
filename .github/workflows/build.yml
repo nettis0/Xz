@@ -336,22 +336,41 @@ jobs:
           )
           source = source.replace("universalApk true", "universalApk false")
 
-          # Remove every simple ndk { abiFilters ... } block, including
-          # product-flavor blocks such as stfdroid. Android Gradle Plugin
-          # rejects ndk.abiFilters when splits.abi is configured.
-          pattern = re.compile(
-              r"(?m)^[ \\t]*ndk[ \\t]*\\{[ \\t]*\\r?\\n"
-              r"(?:^[ \\t]+[^\\r\\n]*\\r?\\n)*?"
-              r"^[ \\t]*abiFilters\\b[^\\r\\n]*\\r?\\n"
-              r"(?:^[ \\t]+[^\\r\\n]*\\r?\\n)*?"
-              r"^[ \\t]*\\}[ \\t]*\\r?\\n?"
-          )
-          source, removed = pattern.subn("", source)
+          # Remove every ndk block containing abiFilters, including product flavors.
+          lines = source.splitlines(keepends=True)
+          cleaned = []
+          removed = 0
+          i = 0
+
+          while i < len(lines):
+              if re.match(r"^\s*ndk\s*\{\s*$", lines[i]):
+                  block = []
+                  depth = 0
+                  j = i
+                  while j < len(lines):
+                      line = lines[j]
+                      block.append(line)
+                      depth += line.count("{") - line.count("}")
+                      j += 1
+                      if depth == 0:
+                          break
+
+                  block_text = "".join(block)
+                  if re.search(r"\babiFilters\b", block_text):
+                      removed += 1
+                  else:
+                      cleaned.extend(block)
+                  i = j
+              else:
+                  cleaned.append(lines[i])
+                  i += 1
+
+          source = "".join(cleaned)
 
           if removed == 0:
               raise SystemExit("No ndk.abiFilters blocks found; refusing to continue.")
 
-          if re.search(r"(?m)^\\s*abiFilters\\b", source):
+          if re.search(r"\babiFilters\b", source):
               raise SystemExit("An abiFilters declaration remains after cleanup.")
 
           path.write_text(source)
