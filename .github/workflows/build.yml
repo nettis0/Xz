@@ -392,7 +392,8 @@ jobs:
               "include 'armeabi-v7a', 'arm64-v8a', 'x86'",
               "include 'armeabi-v7a', 'arm64-v8a'"
           )
-          source = source.replace("universalApk true", "universalApk false")
+          source = source.replace("universalApk false", "universalApk true")
+          source = source.replace("universalApk true", "universalApk true")
 
           # Remove every ndk block containing abiFilters, including product flavors.
           lines = source.splitlines(keepends=True)
@@ -432,7 +433,7 @@ jobs:
               raise SystemExit("An abiFilters declaration remains after cleanup.")
 
           path.write_text(source)
-          print(f"Configured ARM-only ABI splits; removed {removed} ndk.abiFilters block(s).")
+          print(f"Configured ARM ABI splits with a universal APK; removed {removed} ndk.abiFilters block(s).")
           PY
 
       - name: Build libXray AAR
