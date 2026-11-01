@@ -66,7 +66,7 @@ public class HubActivity extends Activity {
         cards.getChildAt(0).requestFocus();
     }
 
-    private TextView makeCard(String title, String caption, int accent, Runnable action) {
+    private LinearLayout makeCard(String title, String caption, int accent, Runnable action) {
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setGravity(Gravity.CENTER);
@@ -89,7 +89,7 @@ public class HubActivity extends Activity {
         detailParams.topMargin = dp(10);
         content.addView(detail, detailParams);
 
-        TextView card = new TextView(this);
+        LinearLayout card = new LinearLayout(this);
         card.setFocusable(true);
         card.setClickable(true);
         card.setGravity(Gravity.CENTER);
