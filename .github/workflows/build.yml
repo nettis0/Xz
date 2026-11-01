@@ -32,6 +32,64 @@ jobs:
         run: python3 ../tools/apply-ui-customization.py
         working-directory: smarttube_src
 
+      - name: Verify stock YouTube-style browse and player
+        working-directory: smarttube_src
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          checks = {
+              "smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/BrowseFragment.java": [
+                  "setOnSearchClickedListener",
+                  "setOnHeaderClickedListener",
+                  "ExtendedHeadersSupportFragment",
+              ],
+              "common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/PlaybackPresenter.java": [
+                  "SponsorBlockController",
+                  "PlayerUIController",
+              ],
+              "smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/PlaybackFragment.java": [
+                  "showControlsOverlay",
+                  "showSuggestions",
+              ],
+              "common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/service/SidebarService.java": [
+                  "MediaGroup.TYPE_HOME",
+                  "MediaGroup.TYPE_SHORTS",
+                  "MediaGroup.TYPE_KIDS_HOME",
+                  "MediaGroup.TYPE_SUBSCRIPTIONS",
+                  "MediaGroup.TYPE_HISTORY",
+                  "MediaGroup.TYPE_SETTINGS",
+              ],
+          }
+
+          for filename, required in checks.items():
+              path = Path(filename)
+              if not path.is_file():
+                  raise SystemExit(f"Required UI source missing: {filename}")
+              source = path.read_text(encoding="utf-8")
+              missing = [token for token in required if token not in source]
+              if missing:
+                  raise SystemExit(f"{filename}: required stock UI features missing: {', '.join(missing)}")
+
+          sidebar = Path(
+              "common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/service/SidebarService.java"
+          ).read_text(encoding="utf-8")
+          for section in (
+              "MediaGroup.TYPE_HOME",
+              "MediaGroup.TYPE_SHORTS",
+              "MediaGroup.TYPE_KIDS_HOME",
+              "MediaGroup.TYPE_SUBSCRIPTIONS",
+              "MediaGroup.TYPE_HISTORY",
+              "MediaGroup.TYPE_SETTINGS",
+          ):
+              if section not in sidebar:
+                  raise SystemExit(f"Compact sidebar section missing: {section}")
+
+          print("Stock browse/search, player controls, SponsorBlock, Shorts and compact sidebar verified.")
+          PY
+
       - name: Set up Java 17 for Android SDK
         uses: actions/setup-java@v4
         with:
