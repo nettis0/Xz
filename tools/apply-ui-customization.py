@@ -192,10 +192,12 @@ def browse_fragment(source):
             voiceSearch.setOnClickListener(v ->
                     SearchPresenter.instance(requireContext()).startVoice());
 
+            // Keep the focusable mic away from the sidebar list so DPAD navigation
+            // can reach every section, including Settings.
             FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                    buttonSize, buttonSize, Gravity.TOP | Gravity.START);
-            params.leftMargin = (int) (12 * density + 0.5f);
-            params.topMargin = (int) (56 * density + 0.5f);
+                    buttonSize, buttonSize, Gravity.TOP | Gravity.END);
+            params.rightMargin = (int) (88 * density + 0.5f);
+            params.topMargin = (int) (8 * density + 0.5f);
             ((FrameLayout) root).addView(voiceSearch, params);
         }
 
