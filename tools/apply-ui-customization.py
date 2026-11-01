@@ -447,6 +447,8 @@ def youtube_colors(source):
         "card_default_background_dark": "#202020",
         "card_selected_background_white": "#383838",
         "card_selected_background_white_grey": "#383838",
+        "card_selected_background_grey": "#383838",
+        "card_selected_text_grey": "#FFFFFF",
         "card_selected_text_black": "#FFFFFF",
         "scheme_grey_background": "#0F0F0F",
         "scheme_grey_background_dark": "#0F0F0F",
