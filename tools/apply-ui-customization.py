@@ -217,6 +217,19 @@ def install_hub():
         target.write_text(source, encoding="utf-8")
         print("Installed TV app hub: HubActivity.java")
 
+
+def disable_background_backup_and_warmup(source):
+    for line, label in [
+        ("import com.liskovsoft.smartyoutubetv2.common.misc.GDriveBackupWorker;\\n", "Remove Google Drive backup worker"),
+        ("import com.liskovsoft.smartyoutubetv2.common.misc.LocalDriveBackupWorker;\\n", "Remove local backup worker"),
+        ("import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;\\n", "Remove eager player cache import"),
+        ("            GDriveBackupWorker.schedule(getContext());\\n", "Disable Google Drive backup scheduling"),
+        ("            LocalDriveBackupWorker.schedule(getContext());\\n", "Disable local backup scheduling"),
+        ("        YouTubeServiceManager.instance().refreshCacheIfNeeded(); // warm up player engine\\n", "Skip eager player cache warm-up to reduce idle memory"),
+    ]:
+        source = replace_once(source, line, "", label)
+    return source
+
 def hub_manifest(source):
     launcher_filter = """            <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -402,5 +415,6 @@ edit("common/src/main/java/com/liskovsoft/smartyoutubetv2/common/prefs/GeneralDa
 edit("smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/BrowseFragment.java", browse_fragment)
 install_hub()
 edit("smarttubetv/src/main/AndroidManifest.xml", hub_manifest)
+edit("common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/SplashPresenter.java", disable_background_backup_and_warmup)
 
 print("UI customization phase 1 completed.")
