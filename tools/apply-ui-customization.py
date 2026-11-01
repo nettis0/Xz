@@ -351,7 +351,7 @@ def vless_dialog_navigation(source):
                             return false;
                         }
                     }, () -> new Handler(Looper.getMainLooper()).postDelayed(
-                            () -> showNetworkSettings(settingsPresenter), 180)), 180);
+                            () -> reopenNetworkSettings(settingsPresenter), 180)), 180);
         }));"""
     source = replace_once(source, old, new, "Restore TV focus for VLESS key entry")
 
@@ -383,7 +383,7 @@ def vless_dialog_navigation(source):
                 MessageHelpers.showMessage(getContext(), success
                         ? "VLESS started for supported SmartTube requests"
                         : "VLESS could not start. Check the saved profile and libXray core.");
-                showNetworkSettings(settingsPresenter);
+                reopenNetworkSettings(settingsPresenter);
             }, 180);
         }, "smarttube-vless-start").start();
     }"""
