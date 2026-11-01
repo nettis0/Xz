@@ -396,6 +396,29 @@ jobs:
             :smarttubetv:assembleStstableDebug \
             --stacktrace
 
+      - name: Validate APK signatures and package metadata
+        if: success()
+        working-directory: smarttube_src
+        shell: bash
+        run: |
+          set -euo pipefail
+          APKSIGNER="$ANDROID_HOME/build-tools/33.0.2/apksigner"
+          AAPT="$ANDROID_HOME/build-tools/33.0.2/aapt"
+          test -x "$APKSIGNER"
+          test -x "$AAPT"
+          mapfile -t APKS < <(find smarttubetv/build/outputs/apk -type f -name '*.apk' | sort)
+          test "${#APKS[@]}" -gt 0
+          mkdir -p ../dist
+          : > ../dist/APK-METADATA.txt
+          for APK in "${APKS[@]}"; do
+            "$APKSIGNER" verify --verbose "$APK"
+            BADGING="$("$AAPT" dump badging "$APK")"
+            PACKAGE="$(printf '%s\\n' "$BADGING" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p" | head -n 1)"
+            SDK="$(printf '%s\\n' "$BADGING" | sed -n "s/^sdkVersion:'\\([^']*\\)'.*/\\1/p" | head -n 1)"
+            test -n "$PACKAGE"
+            printf '%s\\npackage=%s\\nminSdk=%s\\n' "$(basename "$APK")" "$PACKAGE" "$SDK" >> ../dist/APK-METADATA.txt
+          done
+
       - name: Collect APK and checksums
         if: success()
         shell: bash
