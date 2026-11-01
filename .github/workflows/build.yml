@@ -425,6 +425,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
+          git rev-parse HEAD > dist/fork-commit.txt
+          git -C smarttube_src rev-parse HEAD > dist/upstream-smarttube-commit.txt
+          git status --short > dist/fork-working-tree-status.txt
           find smarttube_src/smarttubetv/build/outputs/apk -type f -name '*.apk' -exec cp '{}' dist/ \;
           sha256sum dist/* > dist/SHA256SUMS.txt
           test -n "$(find dist -maxdepth 1 -name '*.apk' -print -quit)"
