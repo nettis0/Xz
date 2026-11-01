@@ -304,6 +304,18 @@ def vless_dialog_navigation(source):
         appendDNSCategory(settingsPresenter);
         settingsPresenter.showDialog(title);"""
     source = replace_once(source, old, new, "Keep Network settings navigation in one place")
+    source = replace_once(
+        source,
+        "    private void appendProxyManager(AppDialogPresenter settingsPresenter) {",
+        """    private void reopenNetworkSettings(AppDialogPresenter settingsPresenter) {
+        GeneralSettingsPresenter.instance(getContext()).show();
+        new Handler(Looper.getMainLooper()).postDelayed(
+                () -> showNetworkSettings(settingsPresenter), 180);
+    }
+
+    private void appendProxyManager(AppDialogPresenter settingsPresenter) {""",
+        "Restore General settings as the parent after VLESS dialogs"
+    )
 
     source = replace_once(
         source,
@@ -416,7 +428,7 @@ def vless_dialog_navigation(source):
                 MessageHelpers.showMessage(getContext(), success
                         ? "VLESS stopped"
                         : "VLESS stop failed. Restart SmartTube if the proxy remains active.");
-                showNetworkSettings(settingsPresenter);
+                reopenNetworkSettings(settingsPresenter);
             }, 180);
         }, "smarttube-vless-stop").start();
     }"""
