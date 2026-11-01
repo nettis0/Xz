@@ -202,7 +202,141 @@ def browse_fragment(source):
         return root;"""
     return replace_once(source, old, new, "Add separate sidebar voice-search button")
 
+
+def vless_dialog_navigation(source):
+    # The nested settings dialog must be closed before Android's AlertDialog editor is shown.
+    # Re-open the Network page after dismissing the editor so the user stays in the same place.
+    old = """        settingsPresenter.appendSingleButton(UiOptionItem.from(title, option -> {
+            appendNetworkErrorFixing(settingsPresenter);
+
+            appendProxyManager(settingsPresenter);
+
+            appendVlessProfile(settingsPresenter);
+
+            appendConscrypt(settingsPresenter);
+
+            appendDNSCategory(settingsPresenter);
+
+            settingsPresenter.showDialog(title);
+        }));"""
+    new = """        settingsPresenter.appendSingleButton(UiOptionItem.from(title, option ->
+                showNetworkSettings(settingsPresenter)));
+    }
+
+    private void showNetworkSettings(AppDialogPresenter settingsPresenter) {
+        String title = getContext().getString(R.string.network_settings);
+        appendNetworkErrorFixing(settingsPresenter);
+        appendProxyManager(settingsPresenter);
+        appendVlessProfile(settingsPresenter);
+        appendConscrypt(settingsPresenter);
+        appendDNSCategory(settingsPresenter);
+        settingsPresenter.showDialog(title);"""
+    source = replace_once(source, old, new, "Keep Network settings navigation in one place")
+
+    old = """        settingsPresenter.appendSingleButton(UiOptionItem.from(title, description, option -> {
+            SimpleEditDialog.show(getContext(), "Import VLESS profile", "vless://…", store.getShareUri(), value -> {
+                try {
+                    VlessConfigBuilder.Profile profile = VlessConfigBuilder.parse(value);
+                    // Generate once here so malformed transport-specific options are rejected before saving.
+                    VlessConfigBuilder.buildXrayConfig(value);
+                    store.saveShareUri(value);
+                    MessageHelpers.showMessage(getContext(), "VLESS profile saved: " + profile.host + ":" + profile.port + ". Open Network settings again to start it.");
+                    return true;
+                } catch (Exception e) {
+                    MessageHelpers.showMessage(getContext(), "Invalid VLESS profile: " + (e.getMessage() == null ? "check the link" : e.getMessage()));
+                    return false;
+                }
+            });
+        }));"""
+    new = """        settingsPresenter.appendSingleButton(UiOptionItem.from(title, description, option -> {
+            // AlertDialog does not reliably receive TV focus while AppDialogView is on top.
+            settingsPresenter.closeDialog();
+            new Handler(Looper.getMainLooper()).postDelayed(() ->
+                    SimpleEditDialog.show(getContext(), "Import VLESS profile", "vless://…", store.getShareUri(), value -> {
+                        try {
+                            VlessConfigBuilder.Profile profile = VlessConfigBuilder.parse(value);
+                            VlessConfigBuilder.buildXrayConfig(value);
+                            store.saveShareUri(value);
+                            MessageHelpers.showMessage(getContext(), "VLESS profile saved: " + profile.host + ":" + profile.port);
+                            return true;
+                        } catch (Exception e) {
+                            MessageHelpers.showMessage(getContext(), "Invalid VLESS profile: " + (e.getMessage() == null ? "check the link" : e.getMessage()));
+                            return false;
+                        }
+                    }, () -> new Handler(Looper.getMainLooper()).postDelayed(
+                            () -> showNetworkSettings(settingsPresenter), 180)), 180);
+        }));"""
+    source = replace_once(source, old, new, "Restore TV focus for VLESS key entry")
+
+    old = """    private void startVless(XrayVlessManager manager, AppDialogPresenter settingsPresenter) {
+        settingsPresenter.closeDialog();
+        new Thread(() -> {
+            try {
+                manager.start();
+                new Handler(Looper.getMainLooper()).post(() -> MessageHelpers.showMessage(getContext(),
+                        "VLESS started. Only SmartTube requests that honor the app proxy are routed; this is not a device-wide VPN."));
+            } catch (Exception e) {
+                new Handler(Looper.getMainLooper()).post(() -> MessageHelpers.showMessage(getContext(),
+                        "VLESS could not start. Check that libXray is installed and the profile is valid."));
+            }
+        }, "smarttube-vless-start").start();
+    }"""
+    new = """    private void startVless(XrayVlessManager manager, AppDialogPresenter settingsPresenter) {
+        settingsPresenter.closeDialog();
+        new Thread(() -> {
+            boolean started = false;
+            try {
+                manager.start();
+                started = true;
+            } catch (Exception ignored) {
+                // Do not expose profile credentials or native config in UI messages.
+            }
+            final boolean success = started;
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                MessageHelpers.showMessage(getContext(), success
+                        ? "VLESS started for supported SmartTube requests"
+                        : "VLESS could not start. Check the saved profile and libXray core.");
+                showNetworkSettings(settingsPresenter);
+            }, 180);
+        }, "smarttube-vless-start").start();
+    }"""
+    source = replace_once(source, old, new, "Keep Network settings open after VLESS start")
+
+    old = """    private void stopVless(XrayVlessManager manager, AppDialogPresenter settingsPresenter) {
+        settingsPresenter.closeDialog();
+        new Thread(() -> {
+            try {
+                manager.stop();
+                new Handler(Looper.getMainLooper()).post(() -> MessageHelpers.showMessage(getContext(), "VLESS stopped"));
+            } catch (Exception e) {
+                new Handler(Looper.getMainLooper()).post(() -> MessageHelpers.showMessage(getContext(),
+                        "VLESS stop reported an error. Restart SmartTube if proxy settings remain stuck."));
+            }
+        }, "smarttube-vless-stop").start();
+    }"""
+    new = """    private void stopVless(XrayVlessManager manager, AppDialogPresenter settingsPresenter) {
+        settingsPresenter.closeDialog();
+        new Thread(() -> {
+            boolean stopped = false;
+            try {
+                manager.stop();
+                stopped = true;
+            } catch (Exception ignored) {
+                // Keep native errors and profile data out of logs and UI.
+            }
+            final boolean success = stopped;
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                MessageHelpers.showMessage(getContext(), success
+                        ? "VLESS stopped"
+                        : "VLESS stop failed. Restart SmartTube if the proxy remains active.");
+                showNetworkSettings(settingsPresenter);
+            }, 180);
+        }, "smarttube-vless-stop").start();
+    }"""
+    return replace_once(source, old, new, "Keep Network settings open after VLESS stop")
+
 edit("common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/service/SidebarService.java", sidebar)
+edit("common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/settings/GeneralSettingsPresenter.java", vless_dialog_navigation)
 edit("common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/settings/GeneralSettingsPresenter.java", general_settings)
 edit("common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/settings/LanguageSettingsPresenter.java", language_settings)
 edit("common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/AppDataSourceManager.java", datasource)
