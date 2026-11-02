@@ -662,3 +662,34 @@ edit(
     "smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/modern/widgets/ModernNavRail.java",
     rail_keys
 )
+
+def vless_tuning(source):
+    source = replace_once(
+        source,
+        "JSONArray inbounds = new JSONArray().put(inbound);",
+        "// DNS for resolving the VLESS server address: DoH, direct, IPv4 only.\n"
+        "        JSONObject dns = new JSONObject()\n"
+        "                .put(\"servers\", new JSONArray()\n"
+        "                        .put(\"https+local://1.1.1.1/dns-query\")\n"
+        "                        .put(\"https+local://8.8.8.8/dns-query\")\n"
+        "                        .put(\"localhost\"))\n"
+        "                .put(\"queryStrategy\", \"UseIPv4\");\n"
+        "        // Larger per-connection buffer for video streaming.\n"
+        "        JSONObject policy = new JSONObject().put(\"levels\", new JSONObject()\n"
+        "                .put(\"0\", new JSONObject().put(\"bufferSize\", 512)));\n"
+        "        JSONArray inbounds = new JSONArray().put(inbound);",
+        "Add DNS and buffer tuning to the Xray config"
+    )
+    return replace_once(
+        source,
+        ".put(\"inbounds\", inbounds).put(\"outbounds\", outbounds).put(\"routing\", routing);",
+        ".put(\"inbounds\", inbounds).put(\"outbounds\", outbounds).put(\"routing\", routing)\n"
+        "                .put(\"dns\", dns).put(\"policy\", policy);",
+        "Attach DNS and policy to the Xray config"
+    )
+
+
+edit(
+    "common/src/main/java/com/liskovsoft/smartyoutubetv2/common/proxy/vless/VlessConfigBuilder.java",
+    vless_tuning
+)
