@@ -693,3 +693,50 @@ edit(
     "common/src/main/java/com/liskovsoft/smartyoutubetv2/common/proxy/vless/VlessConfigBuilder.java",
     vless_tuning
 )
+
+def build_byedpi():
+    import os
+    import shutil
+    import subprocess
+
+    ndk = (os.environ.get("ANDROID_NDK_LATEST_HOME")
+           or os.environ.get("ANDROID_NDK_ROOT")
+           or os.environ.get("ANDROID_NDK_HOME"))
+    if not ndk:
+        raise SystemExit("Android NDK was not found on the runner")
+
+    bin_dir = Path(ndk) / "toolchains" / "llvm" / "prebuilt" / "linux-x86_64" / "bin"
+    work = ROOT / ".work" / "byedpi"
+    if work.exists():
+        shutil.rmtree(work)
+    work.parent.mkdir(parents=True, exist_ok=True)
+
+    subprocess.run(["git", "clone", "--depth", "1",
+                    "https://github.com/hufrea/byedpi.git", str(work)], check=True)
+    revision = subprocess.run(["git", "-C", str(work), "rev-parse", "HEAD"],
+                              check=True, capture_output=True, text=True).stdout.strip()
+    print("ByeDPI revision: " + revision)
+
+    targets = {
+        "arm64-v8a": "aarch64-linux-android21-clang",
+        "armeabi-v7a": "armv7a-linux-androideabi21-clang",
+    }
+
+    for abi, compiler in targets.items():
+        cc = bin_dir / compiler
+        if not cc.is_file():
+            raise SystemExit("NDK compiler not found: " + str(cc))
+
+        for old in list(work.glob("*.o")) + [work / "ciadpi"]:
+            if old.exists():
+                old.unlink()
+
+        subprocess.run(["make", "-C", str(work), "CC=" + str(cc)], check=True)
+
+        out_dir = ROOT / "smarttubetv" / "src" / "main" / "jniLibs" / abi
+        out_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(work / "ciadpi", out_dir / "libbyedpi.so")
+        print("ByeDPI built for " + abi)
+
+
+build_byedpi()
