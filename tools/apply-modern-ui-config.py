@@ -718,8 +718,8 @@ def build_byedpi():
     print("ByeDPI revision: " + revision)
 
     targets = {
-        "arm64-v8a": "aarch64-linux-android21-clang",
-        "armeabi-v7a": "armv7a-linux-androideabi21-clang",
+        "arm64-v8a": "aarch64-linux-android24-clang",
+        "armeabi-v7a": "armv7a-linux-androideabi24-clang",
     }
 
     for abi, compiler in targets.items():
