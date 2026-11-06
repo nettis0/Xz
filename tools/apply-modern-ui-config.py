@@ -790,3 +790,217 @@ edit(
     "common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/settings/GeneralSettingsPresenter.java",
     vless_ui_tweaks
 )
+
+BYEDPI_JAVA = r'''package com.liskovsoft.smartyoutubetv2.common.proxy.byedpi;
+
+import android.content.Context;
+import android.content.SharedPreferences;
+
+import java.io.File;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
+
+/** Runs the bundled ByeDPI binary as a local SOCKS5 proxy on 127.0.0.1:1080. */
+public final class ByeDpiManager {
+    public static final int PORT = 1080;
+    public static final String DEFAULT_STRATEGY = "-d1 -s1+s -s3+s -s6+s -s9+s -s12+s -s15+s -s20+s -s30+s -a1";
+    private static final String PREFS = "byedpi_private";
+    private static ByeDpiManager instance;
+    private final Context context;
+    private final SharedPreferences prefs;
+    private Process process;
+
+    private ByeDpiManager(Context context) {
+        this.context = context.getApplicationContext();
+        prefs = this.context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+    }
+
+    public static synchronized ByeDpiManager instance(Context context) {
+        if (instance == null) instance = new ByeDpiManager(context);
+        return instance;
+    }
+
+    public boolean isEnabled() {
+        return prefs.getBoolean("enabled", false);
+    }
+
+    public void setEnabled(boolean enabled) {
+        prefs.edit().putBoolean("enabled", enabled).apply();
+    }
+
+    public String getStrategy() {
+        return prefs.getString("strategy", DEFAULT_STRATEGY);
+    }
+
+    public synchronized boolean isRunning() {
+        if (process == null) return false;
+        try {
+            process.exitValue();
+            process = null;
+            return false;
+        } catch (IllegalThreadStateException running) {
+            return true;
+        }
+    }
+
+    /** Never throws: returns false if the binary is missing or fails to start. */
+    public synchronized boolean start() {
+        if (isRunning()) return true;
+        try {
+            File binary = new File(context.getApplicationInfo().nativeLibraryDir, "libbyedpi.so");
+            if (!binary.isFile()) return false;
+            List<String> command = new ArrayList<>();
+            command.add(binary.getAbsolutePath());
+            command.add("-i");
+            command.add("127.0.0.1");
+            command.add("-p");
+            command.add(String.valueOf(PORT));
+            for (String part : getStrategy().trim().split("\\s+")) {
+                if (!part.isEmpty()) command.add(part);
+            }
+            ProcessBuilder builder = new ProcessBuilder(command);
+            builder.redirectErrorStream(true);
+            process = builder.start();
+            final InputStream output = process.getInputStream();
+            Thread drain = new Thread(() -> {
+                byte[] buffer = new byte[1024];
+                try {
+                    while (output.read(buffer) >= 0) { }
+                } catch (Exception ignored) { }
+            }, "smarttube-byedpi-log");
+            drain.setDaemon(true);
+            drain.start();
+            Thread.sleep(300);
+            return isRunning();
+        } catch (Exception e) {
+            process = null;
+            return false;
+        }
+    }
+
+    public synchronized void stop() {
+        if (process != null) {
+            process.destroy();
+            process = null;
+        }
+    }
+}
+'''
+
+ROUTING_ADDON = r'''.put("outboundTag", "secure-proxy")));
+        if (byeDpiEnabled) {
+            outbounds.put(new JSONObject().put("protocol", "socks").put("tag", "byedpi")
+                    .put("settings", new JSONObject().put("servers", new JSONArray()
+                            .put(new JSONObject().put("address", "127.0.0.1").put("port", 1080)))));
+            JSONArray oldRules = routing.getJSONArray("rules");
+            JSONArray newRules = new JSONArray();
+            newRules.put(new JSONObject().put("type", "field")
+                    .put("domain", new JSONArray().put("regexp:^rr[0-9]+---sn-q4fl.*\\.googlevideo\\.com$"))
+                    .put("outboundTag", "secure-proxy"));
+            newRules.put(new JSONObject().put("type", "field")
+                    .put("domain", new JSONArray().put("domain:googlevideo.com")
+                            .put("full:youtubei.googleapis.com").put("full:jnn-pa.googleapis.com"))
+                    .put("outboundTag", "byedpi"));
+            for (int i = 0; i < oldRules.length(); i++) newRules.put(oldRules.get(i));
+            routing.put("rules", newRules);
+        }'''
+
+BYEDPI_BUTTON = r'''settingsPresenter.appendSingleButton(UiOptionItem.from("Check VLESS ping", option -> testVlessPing()));
+            settingsPresenter.appendSingleButton(UiOptionItem.from("ByeDPI for video: toggle", option -> {
+                ByeDpiManager byeDpi = ByeDpiManager.instance(getContext());
+                byeDpi.setEnabled(!byeDpi.isEnabled());
+                MessageHelpers.showMessage(getContext(), "ByeDPI for video: " + (byeDpi.isEnabled() ? "ON" : "OFF") + ". Stop and start VLESS to apply.");
+            }));'''
+
+
+def byedpi_manager_file():
+    folder = ROOT / "common" / "src" / "main" / "java" / "com" / "liskovsoft" / "smartyoutubetv2" / "common" / "proxy" / "byedpi"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "ByeDpiManager.java").write_text(BYEDPI_JAVA, encoding="utf-8")
+    print("Created ByeDpiManager.java")
+
+
+def byedpi_in_builder(source):
+    source = replace_once(
+        source,
+        "private VlessConfigBuilder() { }",
+        "private VlessConfigBuilder() { }\n    public static volatile boolean byeDpiEnabled = false;",
+        "Add ByeDPI flag"
+    )
+    return replace_once(
+        source,
+        '.put("outboundTag", "secure-proxy")));',
+        ROUTING_ADDON,
+        "Route YouTube video through ByeDPI"
+    )
+
+
+def byedpi_in_manager(source):
+    source = replace_once(
+        source,
+        "import com.liskovsoft.smartyoutubetv2.common.proxy.ProxyManager;",
+        "import com.liskovsoft.smartyoutubetv2.common.proxy.ProxyManager;\nimport com.liskovsoft.smartyoutubetv2.common.proxy.byedpi.ByeDpiManager;",
+        "Import ByeDPI manager"
+    )
+    source = replace_once(
+        source,
+        "JSONObject config = VlessConfigBuilder.buildXrayConfig(link);",
+        "ByeDpiManager byeDpi = ByeDpiManager.instance(context);\n"
+        "            VlessConfigBuilder.byeDpiEnabled = byeDpi.isEnabled() && byeDpi.start();\n"
+        "            JSONObject config = VlessConfigBuilder.buildXrayConfig(link);",
+        "Start ByeDPI before Xray"
+    )
+    return replace_once(
+        source,
+        "if (failure != null) throw failure;",
+        "ByeDpiManager.instance(context).stop();\n"
+        "        VlessConfigBuilder.byeDpiEnabled = false;\n"
+        "        if (failure != null) throw failure;",
+        "Stop ByeDPI together with VLESS"
+    )
+
+
+def byedpi_ui(source):
+    source = replace_once(
+        source,
+        "import com.liskovsoft.smartyoutubetv2.common.proxy.vless.VlessConfigBuilder;",
+        "import com.liskovsoft.smartyoutubetv2.common.proxy.byedpi.ByeDpiManager;\n"
+        "import com.liskovsoft.smartyoutubetv2.common.proxy.vless.VlessConfigBuilder;",
+        "Import ByeDPI manager"
+    )
+    source = replace_once(
+        source,
+        'settingsPresenter.appendSingleButton(UiOptionItem.from("Check VLESS ping", option -> testVlessPing()));',
+        BYEDPI_BUTTON,
+        "Add ByeDPI toggle button"
+    )
+    source = replace_once(
+        source,
+        'result = "VLESS ping failed. Start VLESS first.";',
+        'result = XrayVlessManager.instance(getContext()).isStarted()\n'
+        '                        ? "VLESS ping failed: server unreachable or key not working"\n'
+        '                        : "VLESS ping failed. Start VLESS first.";',
+        "Clearer ping error"
+    )
+    return replace_once(
+        source,
+        '"VLESS started. Only SmartTube requests that honor the app proxy are routed; this is not a device-wide VPN."',
+        '"VLESS started. ByeDPI: " + (ByeDpiManager.instance(getContext()).isRunning() ? "running" : "off")',
+        "Show ByeDPI status after start"
+    )
+
+
+byedpi_manager_file()
+edit(
+    "common/src/main/java/com/liskovsoft/smartyoutubetv2/common/proxy/vless/VlessConfigBuilder.java",
+    byedpi_in_builder
+)
+edit(
+    "common/src/main/java/com/liskovsoft/smartyoutubetv2/common/proxy/vless/XrayVlessManager.java",
+    byedpi_in_manager
+)
+edit(
+    "common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/settings/GeneralSettingsPresenter.java",
+    byedpi_ui
+)
