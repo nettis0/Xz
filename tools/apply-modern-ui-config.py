@@ -740,3 +740,53 @@ def build_byedpi():
 
 
 build_byedpi()
+
+def vless_ui_tweaks(source):
+    for name in ("startVless", "stopVless"):
+        sig = "    private void " + name + "(XrayVlessManager manager, AppDialogPresenter settingsPresenter) {\n"
+        source = replace_once(
+            source,
+            sig + "        settingsPresenter.closeDialog();\n",
+            sig,
+            "Keep settings open after " + name
+        )
+
+    source = replace_once(
+        source,
+        'settingsPresenter.appendSingleButton(UiOptionItem.from("Remove saved VLESS profile", option -> {',
+        'settingsPresenter.appendSingleButton(UiOptionItem.from("Check VLESS ping", option -> testVlessPing()));\n'
+        '            settingsPresenter.appendSingleButton(UiOptionItem.from("Remove saved VLESS profile", option -> {',
+        "Add VLESS ping button"
+    )
+
+    ping_method = '''    private void testVlessPing() {
+        new Thread(() -> {
+            String result;
+            try {
+                java.net.Proxy socks = new java.net.Proxy(java.net.Proxy.Type.SOCKS,
+                        new java.net.InetSocketAddress("127.0.0.1", 10808));
+                long started = System.currentTimeMillis();
+                java.net.HttpURLConnection connection = (java.net.HttpURLConnection)
+                        new java.net.URL("https://www.google.com/generate_204").openConnection(socks);
+                connection.setConnectTimeout(8000);
+                connection.setReadTimeout(8000);
+                int code = connection.getResponseCode();
+                connection.disconnect();
+                result = "VLESS ping: " + (System.currentTimeMillis() - started) + " ms (HTTP " + code + ")";
+            } catch (Exception e) {
+                result = "VLESS ping failed. Start VLESS first.";
+            }
+            final String message = result;
+            new Handler(Looper.getMainLooper()).post(() -> MessageHelpers.showMessage(getContext(), message));
+        }, "smarttube-vless-ping").start();
+    }
+
+'''
+    start_line = "    private void startVless(XrayVlessManager manager, AppDialogPresenter settingsPresenter) {\n"
+    return replace_once(source, start_line, ping_method + start_line, "Add VLESS ping check")
+
+
+edit(
+    "common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/settings/GeneralSettingsPresenter.java",
+    vless_ui_tweaks
+)
