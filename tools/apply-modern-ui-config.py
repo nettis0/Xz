@@ -1004,3 +1004,22 @@ edit(
     "common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/settings/GeneralSettingsPresenter.java",
     byedpi_ui
 )
+
+def vless_pin(source):
+    return replace_once(
+        source,
+        'tls.put("allowInsecure", false);',
+        'tls.put("allowInsecure", false);\n'
+        '                java.util.regex.Matcher pin = java.util.regex.Pattern.compile("[?&]pcs=([^&#]+)").matcher(shareUri);\n'
+        '                if (pin.find()) {\n'
+        '                    String hex = decode(pin.group(1)).replace(":", "").toLowerCase(Locale.ROOT);\n'
+        '                    tls.put("pinnedPeerCertSha256", new JSONArray().put(hex));\n'
+        '                }',
+        "Support pinned certificate in VLESS links"
+    )
+
+
+edit(
+    "common/src/main/java/com/liskovsoft/smartyoutubetv2/common/proxy/vless/VlessConfigBuilder.java",
+    vless_pin
+)
