@@ -1023,3 +1023,23 @@ edit(
     "common/src/main/java/com/liskovsoft/smartyoutubetv2/common/proxy/vless/VlessConfigBuilder.java",
     vless_pin
 )
+
+def vless_pin_fix(source):
+    source = replace_once(
+        source,
+        'String hex = decode(pin.group(1)).replace(":", "").toLowerCase(Locale.ROOT);',
+        'String hex = decode(pin.group(1)).toUpperCase(Locale.ROOT);',
+        "Keep pinned certificate format as in the provider config"
+    )
+    return replace_once(
+        source,
+        'tls.put("pinnedPeerCertSha256", new JSONArray().put(hex));',
+        'tls.put("pinnedPeerCertSha256", hex);',
+        "Pinned certificate as a string"
+    )
+
+
+edit(
+    "common/src/main/java/com/liskovsoft/smartyoutubetv2/common/proxy/vless/VlessConfigBuilder.java",
+    vless_pin_fix
+)
