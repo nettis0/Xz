@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+в4#!/usr/bin/env python3
 from pathlib import Path
 import re
 
@@ -1043,3 +1043,516 @@ edit(
     "common/src/main/java/com/liskovsoft/smartyoutubetv2/common/proxy/vless/VlessConfigBuilder.java",
     vless_pin_fix
 )
+
+KEY_LIST_JAVA = r'''package com.liskovsoft.smartyoutubetv2.common.proxy.vless;
+
+import android.content.Context;
+import android.content.SharedPreferences;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/** Several VLESS links kept in app-private preferences. Never logged. */
+public final class VlessKeyList {
+    private static final String PREFS = "vless_keys_private";
+    private static final String KEY = "keys";
+    private final SharedPreferences preferences;
+
+    public VlessKeyList(Context context) {
+        preferences = context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+    }
+
+    public List<String> getAll() {
+        List<String> result = new ArrayList<>();
+        for (String line : preferences.getString(KEY, "").split("\n")) {
+            String value = line.trim();
+            if (!value.isEmpty() && !result.contains(value)) result.add(value);
+        }
+        return result;
+    }
+
+    public void add(String link) {
+        List<String> all = getAll();
+        String value = link == null ? "" : link.trim();
+        if (value.isEmpty() || all.contains(value)) return;
+        all.add(value);
+        StringBuilder joined = new StringBuilder();
+        for (String item : all) joined.append(item).append('\n');
+        preferences.edit().putString(KEY, joined.toString()).apply();
+    }
+}
+'''
+
+ROUTE_STORE_JAVA = r'''package com.liskovsoft.smartyoutubetv2.common.proxy.vless;
+
+import android.content.Context;
+import android.content.SharedPreferences;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/** Domains that pass through ByeDPI and are therefore routed to it. */
+public final class RouteStore {
+    private static final String PREFS = "byedpi_routes_private";
+    private static final String KEY = "domains";
+    private final SharedPreferences preferences;
+
+    public RouteStore(Context context) {
+        preferences = context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+    }
+
+    public List<String> getDomains() {
+        List<String> result = new ArrayList<>();
+        for (String line : preferences.getString(KEY, "").split("\n")) {
+            String value = line.trim();
+            if (!value.isEmpty()) result.add(value);
+        }
+        return result;
+    }
+
+    public void saveDomains(List<String> domains) {
+        StringBuilder joined = new StringBuilder();
+        for (String domain : domains) joined.append(domain).append('\n');
+        preferences.edit().putString(KEY, joined.toString()).apply();
+    }
+}
+'''
+
+TUNER_JAVA = r'''package com.liskovsoft.smartyoutubetv2.common.proxy.vless;
+
+import android.content.Context;
+
+import com.liskovsoft.smartyoutubetv2.common.proxy.byedpi.ByeDpiManager;
+
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Locale;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
+
+/** Picks the fastest saved VLESS key and builds per-domain ByeDPI routes. Blocking: call from a thread. */
+public final class NetworkAutoTuner {
+    public interface Callback {
+        void onStatus(String text);
+    }
+
+    private static final int VLESS_PORT = 10808;
+
+    private static final String[] TEST_HOSTS = {
+            "rr2---sn-hgn7ynek.googlevideo.com", "rr1---sn-gvnuxaxjvh-5gie.googlevideo.com",
+            "rr1---sn-4axm-n8vs.googlevideo.com", "rr12---sn-gvnuxaxjvh-bvwz.googlevideo.com",
+            "rr1---sn-u5uuxaxjvhg0-ocje.googlevideo.com", "rr1---sn-xguxaxjvh-gufl.googlevideo.com",
+            "rr1---sn-gvnuxaxjvh-o8ge.googlevideo.com", "rr1---sn-ug5onuxaxjvh-n8v6.googlevideo.com",
+            "rr14---sn-n8v7kn7r.googlevideo.com", "rr1---sn-8ph2xajvh-5xge.googlevideo.com",
+            "rr1---sn-ug5onuxaxjvh-p3ul.googlevideo.com", "rr16---sn-axq7sn76.googlevideo.com",
+            "rr5---sn-n8v7knez.googlevideo.com", "rr10---sn-gvnuxaxjvh-304z.googlevideo.com",
+            "rr4---sn-jvhnu5g-c35d.googlevideo.com", "jnn-pa.googleapis.com",
+            "youtubei.googleapis.com", "manifest.googlevideo.com",
+            "rr5---sn-gvnuxaxjvh-n8vk.googlevideo.com", "rr1---sn-q4fl6n6y.googlevideo.com",
+            "youtu.be", "i.ytimg.com", "youtube.com", "rr2---sn-q4fl6ndl.googlevideo.com",
+            "rr4---sn-q4flrnsl.googlevideo.com", "yt3.ggpht.com", "i9.ytimg.com",
+            "yt3.googleusercontent.com", "googleusercontent.com", "yt4.ggpht.com",
+            "signaler-pa.youtube.com", "googleapis.com"
+    };
+
+    private static final String[] STRATEGIES = {
+            "-d1 -s1+s -s3+s -s6+s -s9+s -s12+s -s15+s -s20+s -s30+s -a1",
+            "--disorder 1 --auto=torst --tlsrec 1+s",
+            "--disorder 1",
+            "--fake -1 --ttl 8",
+            "--split 1+s --disorder 3+s",
+            "--disorder 1 --tlsrec 3+s",
+            "--oob 3+s",
+            "--tlsrec 3+s",
+            "--split 2 --tlsrec 3+s",
+            "--fake -1 --ttl 8 --tlsrec 3+s",
+            "--disorder 1 --fake -1 --ttl 8",
+            "-Y --disorder 1 --tlsrec 1+s",
+            "--oob 1+s --tlsrec 1+s",
+            "--split 1+s --oob 3+s"
+    };
+
+    private NetworkAutoTuner() { }
+
+    public static String tuneKeys(Context context, Callback callback) throws Exception {
+        VlessKeyList list = new VlessKeyList(context);
+        VlessProfileStore store = new VlessProfileStore(context);
+        XrayVlessManager manager = XrayVlessManager.instance(context);
+        ByeDpiManager byeDpi = ByeDpiManager.instance(context);
+
+        List<String> keys = list.getAll();
+        String original = store.getShareUri();
+        if (!original.isEmpty() && !keys.contains(original)) keys.add(0, original);
+        if (keys.isEmpty()) return "No VLESS keys saved";
+
+        boolean wasStarted = manager.isStarted();
+        boolean byeDpiWasEnabled = byeDpi.isEnabled();
+        byeDpi.setEnabled(false);
+        if (wasStarted) {
+            try { manager.stop(); } catch (Exception ignored) { }
+        }
+
+        java.net.Proxy socks = new java.net.Proxy(java.net.Proxy.Type.SOCKS, new InetSocketAddress("127.0.0.1", VLESS_PORT));
+        String bestKey = null;
+        double bestScore = -1e9;
+        int bestIndex = -1;
+        StringBuilder report = new StringBuilder();
+
+        for (int i = 0; i < keys.size(); i++) {
+            String key = keys.get(i);
+            String label = "Key " + (i + 1) + "/" + keys.size();
+            callback.onStatus(label + ": testing...");
+            try {
+                VlessConfigBuilder.buildXrayConfig(key);
+                store.saveShareUri(key);
+                manager.start();
+                Thread.sleep(500);
+
+                long ping = medianPing(socks);
+                boolean youtubeOk = requestOk("https://www.youtube.com/generate_204", socks);
+                double speed = youtubeOk ? downloadMbps(socks) : 0;
+                double score = (youtubeOk ? 0 : -1000) + speed - ping / 1000.0;
+                report.append(label).append(": ").append(ping).append(" ms, ")
+                        .append(String.format(Locale.US, "%.1f", speed)).append(" Mbit/s")
+                        .append(youtubeOk ? "" : ", YouTube FAIL").append("; ");
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestKey = key;
+                    bestIndex = i + 1;
+                }
+            } catch (Exception e) {
+                report.append(label).append(": failed; ");
+            } finally {
+                try { manager.stop(); } catch (Exception ignored) { }
+            }
+        }
+
+        byeDpi.setEnabled(byeDpiWasEnabled);
+        String finalKey = bestKey != null ? bestKey : original;
+        if (!finalKey.isEmpty()) store.saveShareUri(finalKey);
+        if (wasStarted) {
+            try { manager.start(); } catch (Exception ignored) { }
+        }
+        return (bestKey != null ? "Best: key " + bestIndex + ". " : "No working key. ") + report;
+    }
+
+    public static String tuneStrategies(Context context, Callback callback) {
+        ByeDpiManager byeDpi = ByeDpiManager.instance(context);
+        XrayVlessManager manager = XrayVlessManager.instance(context);
+        boolean vlessWasStarted = manager.isStarted();
+
+        String previous = byeDpi.getStrategy();
+        List<String> candidates = new ArrayList<>();
+        candidates.add(previous);
+        for (String strategy : STRATEGIES) {
+            if (!candidates.contains(strategy)) candidates.add(strategy);
+        }
+
+        byeDpi.stop();
+        pause(200);
+        String best = previous;
+        int bestPass = -1;
+
+        for (int i = 0; i < candidates.size(); i++) {
+            String strategy = candidates.get(i);
+            callback.onStatus("Strategy " + (i + 1) + "/" + candidates.size() + ": testing...");
+            byeDpi.setStrategy(strategy);
+            byeDpi.stop();
+            pause(200);
+            int pass = 0;
+            if (byeDpi.start()) {
+                pass = passing(ByeDpiManager.PORT).size();
+            }
+            byeDpi.stop();
+            if (pass > bestPass) {
+                bestPass = pass;
+                best = strategy;
+            }
+        }
+
+        callback.onStatus("Building routes for the best strategy...");
+        byeDpi.setStrategy(best);
+        byeDpi.stop();
+        pause(200);
+        List<String> viaByeDpi = new ArrayList<>();
+        if (byeDpi.start()) {
+            viaByeDpi = passing(ByeDpiManager.PORT);
+        }
+        byeDpi.stop();
+        new RouteStore(context).saveDomains(viaByeDpi);
+        byeDpi.setEnabled(!viaByeDpi.isEmpty());
+
+        String vlessPart = "VLESS was not running, start it and repeat to see the combined result";
+        if (vlessWasStarted) {
+            List<String> viaVless = passing(VLESS_PORT);
+            int combined = viaByeDpi.size();
+            for (String host : viaVless) {
+                if (!viaByeDpi.contains(host)) combined++;
+            }
+            vlessPart = "VLESS " + viaVless.size() + "/" + TEST_HOSTS.length + ", combined " + combined + "/" + TEST_HOSTS.length;
+            try {
+                manager.stop();
+                manager.start();
+            } catch (Exception ignored) { }
+        }
+        return "ByeDPI " + viaByeDpi.size() + "/" + TEST_HOSTS.length + " (" + best + "); " + vlessPart;
+    }
+
+    private static void pause(long ms) {
+        try { Thread.sleep(ms); } catch (InterruptedException ignored) { }
+    }
+
+    private static long medianPing(java.net.Proxy proxy) throws Exception {
+        long[] times = new long[3];
+        for (int i = 0; i < times.length; i++) {
+            long started = System.currentTimeMillis();
+            HttpURLConnection connection = (HttpURLConnection) new URL("https://www.google.com/generate_204").openConnection(proxy);
+            connection.setConnectTimeout(8000);
+            connection.setReadTimeout(8000);
+            connection.getResponseCode();
+            connection.disconnect();
+            times[i] = System.currentTimeMillis() - started;
+        }
+        Arrays.sort(times);
+        return times[1];
+    }
+
+    private static boolean requestOk(String url, java.net.Proxy proxy) {
+        try {
+            HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection(proxy);
+            connection.setConnectTimeout(8000);
+            connection.setReadTimeout(8000);
+            int code = connection.getResponseCode();
+            connection.disconnect();
+            return code == 204 || code == 200;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private static double downloadMbps(java.net.Proxy proxy) {
+        try {
+            long started = System.currentTimeMillis();
+            HttpURLConnection connection = (HttpURLConnection) new URL("https://speed.cloudflare.com/__down?bytes=4000000").openConnection(proxy);
+            connection.setConnectTimeout(8000);
+            connection.setReadTimeout(8000);
+            InputStream input = connection.getInputStream();
+            byte[] buffer = new byte[16384];
+            long total = 0;
+            int read;
+            while ((read = input.read(buffer)) >= 0) {
+                total += read;
+                if (System.currentTimeMillis() - started > 8000) break;
+            }
+            input.close();
+            connection.disconnect();
+            long elapsed = Math.max(1, System.currentTimeMillis() - started);
+            return total * 8.0 / (elapsed * 1000.0);
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    private static List<String> passing(final int port) {
+        ExecutorService pool = Executors.newFixedThreadPool(8);
+        List<Future<Boolean>> futures = new ArrayList<>();
+        for (final String host : TEST_HOSTS) {
+            futures.add(pool.submit(new Callable<Boolean>() {
+                @Override
+                public Boolean call() {
+                    return hostOk(host, port);
+                }
+            }));
+        }
+        List<String> result = new ArrayList<>();
+        for (int i = 0; i < futures.size(); i++) {
+            try {
+                if (futures.get(i).get(9, TimeUnit.SECONDS)) result.add(TEST_HOSTS[i]);
+            } catch (Exception ignored) { }
+        }
+        pool.shutdownNow();
+        return result;
+    }
+
+    private static boolean hostOk(String host, int port) {
+        Socket tunnel = null;
+        try {
+            java.net.Proxy socks = new java.net.Proxy(java.net.Proxy.Type.SOCKS,
+                    new InetSocketAddress("127.0.0.1", port));
+            tunnel = new Socket(socks);
+            tunnel.connect(InetSocketAddress.createUnresolved(host, 443), 4000);
+            tunnel.setSoTimeout(4000);
+            SSLSocket ssl = (SSLSocket) ((SSLSocketFactory) SSLSocketFactory.getDefault()).createSocket(tunnel, host, 443, true);
+            ssl.startHandshake();
+            OutputStream out = ssl.getOutputStream();
+            out.write(("HEAD / HTTP/1.1\r\nHost: " + host + "\r\nConnection: close\r\n\r\n").getBytes("US-ASCII"));
+            out.flush();
+            return ssl.getInputStream().read() >= 0;
+        } catch (Exception e) {
+            return false;
+        } finally {
+            try { if (tunnel != null) tunnel.close(); } catch (Exception ignored) { }
+        }
+    }
+}
+'''
+
+TUNER_UI_BUTTONS = r'''settingsPresenter.appendSingleButton(UiOptionItem.from("Check VLESS ping", option -> testVlessPing()));
+            settingsPresenter.appendSingleButton(UiOptionItem.from("Add VLESS key to the list", option -> addKeyToList()));
+            settingsPresenter.appendSingleButton(UiOptionItem.from("Auto-select best VLESS key", option -> runAutoTuner(true)));
+            settingsPresenter.appendSingleButton(UiOptionItem.from("Auto-select ByeDPI strategy + routes", option -> runAutoTuner(false)));'''
+
+TUNER_UI_METHODS = r'''    private void addKeyToList() {
+        SimpleEditDialog.show(getContext(), "Add VLESS key", "vless://…", "", value -> {
+            try {
+                String link = value.trim();
+                VlessConfigBuilder.parse(link);
+                VlessConfigBuilder.buildXrayConfig(link);
+                VlessKeyList list = new VlessKeyList(getContext());
+                list.add(link);
+                MessageHelpers.showMessage(getContext(), "Key added. Saved keys: " + list.getAll().size());
+                return true;
+            } catch (Exception e) {
+                MessageHelpers.showMessage(getContext(), "Invalid VLESS key");
+                return false;
+            }
+        });
+    }
+
+    private void runAutoTuner(boolean keys) {
+        final Context appContext = getContext().getApplicationContext();
+        final Handler handler = new Handler(Looper.getMainLooper());
+        new Thread(() -> {
+            NetworkAutoTuner.Callback callback = text -> handler.post(() -> MessageHelpers.showMessage(appContext, text));
+            String result;
+            try {
+                result = keys ? NetworkAutoTuner.tuneKeys(appContext, callback) : NetworkAutoTuner.tuneStrategies(appContext, callback);
+            } catch (Exception e) {
+                result = "Auto-select failed";
+            }
+            final String message = result;
+            handler.post(() -> MessageHelpers.showMessage(appContext, message));
+        }, "smarttube-auto-tuner").start();
+    }
+
+'''
+
+
+def tuner_files():
+    folder = ROOT / "common" / "src" / "main" / "java" / "com" / "liskovsoft" / "smartyoutubetv2" / "common" / "proxy" / "vless"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "VlessKeyList.java").write_text(KEY_LIST_JAVA, encoding="utf-8")
+    (folder / "RouteStore.java").write_text(ROUTE_STORE_JAVA, encoding="utf-8")
+    (folder / "NetworkAutoTuner.java").write_text(TUNER_JAVA, encoding="utf-8")
+    print("Created VlessKeyList.java, RouteStore.java and NetworkAutoTuner.java")
+
+
+def byedpi_set_strategy(source):
+    return replace_once(
+        source,
+        "    public synchronized void stop() {",
+        "    public synchronized void setStrategy(String strategy) {\n"
+        "        prefs.edit().putString(\"strategy\", strategy).apply();\n"
+        "    }\n\n"
+        "    public synchronized void stop() {",
+        "Add ByeDPI strategy setter"
+    )
+
+
+def routes_in_builder(source):
+    source = replace_once(
+        source,
+        "public static volatile boolean byeDpiEnabled = false;",
+        "public static volatile boolean byeDpiEnabled = false;\n"
+        "    public static volatile java.util.List<String> byeDpiDomains = new java.util.ArrayList<>();",
+        "Add tested ByeDPI domain list"
+    )
+    source = replace_once(
+        source,
+        '.put("domain", new JSONArray().put("domain:googlevideo.com")',
+        '.put("domain", new JSONArray().put("full:unused-a.invalid")',
+        "Disable the broad googlevideo rule"
+    )
+    source = replace_once(
+        source,
+        '.put("full:youtubei.googleapis.com").put("full:jnn-pa.googleapis.com"))',
+        '.put("full:unused-b.invalid"))',
+        "Disable the fixed API rule"
+    )
+    return replace_once(
+        source,
+        "for (int i = 0; i < oldRules.length(); i++) newRules.put(oldRules.get(i));",
+        "if (!byeDpiDomains.isEmpty()) {\n"
+        "                JSONArray learned = new JSONArray();\n"
+        "                for (String host : byeDpiDomains) learned.put(\"full:\" + host);\n"
+        "                newRules.put(new JSONObject().put(\"type\", \"field\").put(\"domain\", learned).put(\"outboundTag\", \"byedpi\"));\n"
+        "            }\n"
+        "            for (int i = 0; i < oldRules.length(); i++) newRules.put(oldRules.get(i));",
+        "Route only tested domains through ByeDPI"
+    )
+
+
+def routes_in_manager(source):
+    return replace_once(
+        source,
+        "VlessConfigBuilder.byeDpiEnabled = byeDpi.isEnabled() && byeDpi.start();",
+        "VlessConfigBuilder.byeDpiEnabled = byeDpi.isEnabled() && byeDpi.start();\n"
+        "            VlessConfigBuilder.byeDpiDomains = new RouteStore(context).getDomains();",
+        "Load tested ByeDPI domains before building the config"
+    )
+
+
+def tuner_ui(source):
+    source = replace_once(
+        source,
+        "import com.liskovsoft.smartyoutubetv2.common.proxy.byedpi.ByeDpiManager;",
+        "import com.liskovsoft.smartyoutubetv2.common.proxy.byedpi.ByeDpiManager;\n"
+        "import com.liskovsoft.smartyoutubetv2.common.proxy.vless.NetworkAutoTuner;\n"
+        "import com.liskovsoft.smartyoutubetv2.common.proxy.vless.VlessKeyList;",
+        "Import auto tuner classes"
+    )
+    source = replace_once(
+        source,
+        'settingsPresenter.appendSingleButton(UiOptionItem.from("Check VLESS ping", option -> testVlessPing()));',
+        TUNER_UI_BUTTONS,
+        "Add auto-select buttons"
+    )
+    return replace_once(
+        source,
+        "    private void testVlessPing() {\n",
+        TUNER_UI_METHODS + "    private void testVlessPing() {\n",
+        "Add auto tuner methods"
+    )
+
+
+tuner_files()
+edit(
+    "common/src/main/java/com/liskovsoft/smartyoutubetv2/common/proxy/byedpi/ByeDpiManager.java",
+    byedpi_set_strategy
+)
+edit(
+    "common/src/main/java/com/liskovsoft/smartyoutubetv2/common/proxy/vless/VlessConfigBuilder.java",
+    routes_in_builder
+)
+edit(
+    "common/src/main/java/com/liskovsoft/smartyoutubetv2/common/proxy/vless/XrayVlessManager.java",
+    routes_in_manager
+)
+edit(
+    "common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/settings/GeneralSettingsPresenter.java",
+    tuner_ui
+)
+
